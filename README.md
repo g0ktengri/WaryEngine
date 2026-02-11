@@ -1,36 +1,57 @@
 # Wary Engine
 
-A simple custom 2D Game Engine developed in C++ using OpenGL 3.3.
+A lightweight 2D Game Engine developed in C++ using SDL2, OpenGL 3.3, and Dear ImGui.
 
-This project was created to understand the fundamentals of game engine architecture, including rendering, input handling, and entity management (ECS). It uses SDL2 for windowing, GLAD for OpenGL loading, and Dear ImGui for the editor interface.
+This project serves as a foundational exploration into game engine architecture, focusing on ECS (Entity Component System), custom rendering pipelines, and editor tool development.
 
-## Features
+## key Features
 
-- **Rendering**: Custom OpenGL 3.3 renderer with shader support.
-- **Entity Component System (ECS)**: Basic implementation for managing game objects.
-- **Editor UI**: Integrated Inspector and Scene Hierarchy panels using Dear ImGui.
-- **Asset Management**: Dynamic texture loading from the assets folder.
-- **Input System**: Keyboard and mouse input handling.
-- **Physics**: Basic AABB collision detection and gravity simulation.
-- **Camera**: 2D camera with pan and zoom functionality.
-- **Particle System**: Simple particle generation.
+### Core Systems
+-   **Entity Component System (ECS)**: Flexible management of game objects with properties like Transform, Physics, and Rendering.
+-   **OpenGL 3.3 Renderer**: Custom rendering engine supporting shaders, textures, and batching (planned).
+-   **Input System**: Robust handling of Keyboard and Mouse inputs.
+
+### Editor Tools
+-   **Scene Editor**: Real-time scene manipulation with a comprehensive UI.
+-   **Inspector Panel**: Modify entity properties (Position, Rotation, Scale, Color, Texture) dynamically.
+-   **Scene Hierarchy**: View and select active entities in the scene.
+-   **Infinite Grid System**: A visual guide for precise object placement with axis highlights.
+-   **Undo System**: Revert accidental changes effortlessly with `Ctrl + Z`.
+-   **Non-Uniform Scaling**: Independent control over Entity Width and Height for versatile shapes.
+-   **Asset Management**: Automatic loading of textures from the `assets` folder.
+
+### Physics & Gameplay
+-   **Basic Physics**: Gravity simulation and AABB (Axis-Aligned Bounding Box) collision detection.
+-   **Particle System**: Built-in particle generator for visual effects.
+-   **Camera Control**: Pan and Zoom capabilities to navigate the 2D world.
 
 ## Dependencies
 
-- **C++20**
-- **OpenGL 3.3**
-- **SDL2** (Simple DirectMedia Layer)
-- **GLAD** (OpenGL Loader)
-- **Dear ImGui** (Immediate Mode GUI)
-- **stb_image** (Image loading)
+The project relies on the following libraries (included or easily obtainable):
+
+-   **C++20** Standard
+-   **OpenGL 3.3**
+-   **SDL2** (Windowing & Input)
+-   **GLAD** (OpenGL Loader)
+-   **Dear ImGui** (Editor UI)
+-   **stb_image** (Image Loading)
+-   **GLM** (Mathematics - Optional/Integrated)
 
 ## How to Build
 
-The project uses CMake for building.
+The project utilizes **CMake** for cross-platform build configuration.
 
-1.  Clone the repository.
-2.  Create a build directory.
-3.  Run CMake:
+1.  Clone the repository:
+    ```bash
+    git clone https://github.com/YourUsername/WaryEngine.git
+    cd WaryEngine
+    ```
+2.  Create a build directory:
+    ```bash
+    mkdir build
+    cd build
+    ```
+3.  Generate project files:
     ```bash
     cmake ..
     ```
@@ -38,12 +59,19 @@ The project uses CMake for building.
     ```bash
     cmake --build .
     ```
-5.  Run the executable from the bin folder.
+5.  Run the executable from the `bin` or output directory.
 
 ## Controls
 
-- **WASD**: Move the selected entity.
-- **Left Click**: Select an entity in the scene.
-- **Middle Mouse**: Pan the camera.
-- **Mouse Wheel**: Zoom in and out.
-- **Space**: Spawn particles from the selected entity.
+### Editor
+-   **Left Click**: Select Entity
+-   **Middle Mouse Drag**: Pan Camera
+-   **Mouse Wheel**: Zoom In/Out
+-   **Ctrl + Z**: Undo last action
+
+### Entity Manipulation
+-   **Inspector Panel**: Adjust Position, Scale (Width/Height), Rotation, Color, and Physics properties.
+
+### Gameplay / Debug
+-   **WASD**: Move selected entity (Debug)
+-   **Space**: Spawn Particle Effect on selected entity
