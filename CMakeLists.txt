@@ -20,7 +20,7 @@ set(IMGUI_SOURCES
     imgui/backends/imgui_impl_opengl3.cpp
 )
 
-add_executable(${PROJECT_NAME} 
+add_executable(${PROJECT_NAME} WIN32
     ${SOURCES} 
     ${HEADERS}
     ${IMGUI_SOURCES}

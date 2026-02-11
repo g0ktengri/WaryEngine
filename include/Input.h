@@ -37,10 +37,6 @@ public:
   static bool IsKeyDown(SDL_Scancode key) { return keys[key]; }
 };
 
-bool Input::keys[256] = {false};
-int Input::mouseX = 0;
-int Input::mouseY = 0;
-bool Input::mouseLeft = false;
-bool Input::mouseRight = false;
+
 
 #endif
