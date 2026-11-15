@@ -5,6 +5,7 @@
 #include <vector>
 #include "Entity.h"
 #include "Renderer.h"
+#include "EditorUI.h"
 
 class Engine {
 public:
@@ -17,6 +18,7 @@ public:
 private:
     SDL_Window* window;
     Renderer renderer;
+    EditorUI editorUI;
     bool running;
     
     std::vector<Entity> entities;

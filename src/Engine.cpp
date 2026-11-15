@@ -16,7 +16,9 @@ Engine::~Engine() {
 void Engine::Init() {
     SDL_Init(SDL_INIT_VIDEO);
     window = SDL_CreateWindow("Wary Engine", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
-    renderer.Init(window);
+    SDL_GLContext ctx = SDL_GL_CreateContext(window);
+    renderer.Init();
+    editorUI.Init(window, ctx);
 
     // Initial Entity
     entities.push_back({"Player", 0, 0, 0, 0.4f, 0.4f, {1, 1, 1}, "default", true, false, 0});

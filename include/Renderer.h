@@ -14,7 +14,7 @@ public:
     Renderer();
     ~Renderer();
 
-    void Init(SDL_Window* window);
+    void Init();
     void Render(SDL_Window* window, std::vector<Entity>& entities, std::vector<Particle>& particles, const Camera& cam, int& selectedEntityIndex, std::vector<std::vector<Entity>>& undoStack, bool& saveRequested);
     void RefreshTextures();
 
@@ -44,7 +44,6 @@ private:
     void CreateTransform(float* m, float x, float y, float r, float sx, float sy);
     void CreateView(float* m, Camera c, float aspect);
     bool CheckPointInside(Entity& e, float px, float py);
-    void SetupUIStyle();
 };
 
 #endif
