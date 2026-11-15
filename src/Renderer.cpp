@@ -202,6 +202,8 @@ void Renderer::RefreshTextures() {
         unsigned char white[] = {255, 255, 255, 255};
         glBindTexture(GL_TEXTURE_2D, id);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, white);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         textures["default"] = id;
         textureList.push_back("default");
     }
@@ -401,6 +403,7 @@ void Renderer::Render(SDL_Window* window, std::vector<Entity>& entities, std::ve
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
     // Draw Entities
+    glUseProgram(shaderProgram);
     glBindVertexArray(VAO);
     for (auto &e : entities) {
         float tm[16];
