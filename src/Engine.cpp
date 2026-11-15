@@ -4,6 +4,7 @@
 #include "imgui_impl_sdl2.h"
 #include <fstream>
 #include <iostream>
+#include <algorithm>
 
 Engine::Engine() : window(nullptr), running(false), selectedEntity(0) {}
 
@@ -147,7 +148,9 @@ void Engine::Update() {
 void Engine::SaveScene() {
     std::ofstream f("scene.wary");
     for (auto &e : entities) {
-        f << e.name << " " << e.x << " " << e.y << " " << e.rotation << " "
+        std::string safeName = e.name;
+        std::replace(safeName.begin(), safeName.end(), ' ', '_');
+        f << safeName << " " << e.x << " " << e.y << " " << e.rotation << " "
           << e.sx << " " << e.sy << " " << e.color[0] << " " << e.color[1] << " " << e.color[2]
           << " " << e.hasGravity << " " << e.isStatic << " " << e.textureName << "\n";
     }
@@ -162,7 +165,9 @@ void Engine::LoadScene() {
     int g, st;
     std::string tName;
     while (f >> name >> x >> y >> r >> sx >> sy >> c0 >> c1 >> c2 >> g >> st >> tName) {
-        entities.push_back({name, x, y, r, sx, sy, {c0, c1, c2}, tName, true, (bool)g, (bool)st, 0});
+        std::string decodedName = name;
+        std::replace(decodedName.begin(), decodedName.end(), '_', ' ');
+        entities.push_back({decodedName, x, y, r, sx, sy, {c0, c1, c2}, tName, true, (bool)g, (bool)st, 0});
     }
 }
 
