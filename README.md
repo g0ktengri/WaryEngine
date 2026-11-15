@@ -2,12 +2,12 @@
 
 A lightweight 2D Game Engine developed in C++ using SDL2, OpenGL 3.3, and Dear ImGui.
 
-This project serves as a foundational exploration into game engine architecture, focusing on ECS (Entity Component System), custom rendering pipelines, and editor tool development.
+This project serves as a foundational exploration into game engine architecture, focusing on entity-based scene management, custom rendering pipelines, and editor tool development.
 
 ## key Features
 
 ### Core Systems
--   **Entity Component System (ECS)**: Flexible management of game objects with properties like Transform, Physics, and Rendering.
+-   **Entity Management**: Structured handling of game objects with properties like Transform, Physics, and Rendering. (A true ECS architecture is in progress.)
 -   **OpenGL 3.3 Renderer**: Custom rendering engine supporting shaders, textures, and batching (planned).
 -   **Input System**: Robust handling of Keyboard and Mouse inputs.
 
@@ -35,7 +35,6 @@ The project relies on the following libraries (included or easily obtainable):
 -   **GLAD** (OpenGL Loader)
 -   **Dear ImGui** (Editor UI)
 -   **stb_image** (Image Loading)
--   **GLM** (Mathematics - Optional/Integrated)
 
 ## How to Build
 
