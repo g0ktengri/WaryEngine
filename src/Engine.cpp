@@ -42,7 +42,9 @@ void Engine::Run() {
         }
 
         Update();
-        renderer.Render(window, entities, particles, cam, selectedEntity, undoStack);
+        bool saveRequested = false;
+        renderer.Render(window, entities, particles, cam, selectedEntity, undoStack, saveRequested);
+        if (saveRequested) SaveScene();
     }
 }
 

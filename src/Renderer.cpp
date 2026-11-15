@@ -245,7 +245,7 @@ bool Renderer::CheckPointInside(Entity &e, float px, float py) {
     return (px > e.x - halfX && px < e.x + halfX && py > e.y - halfY && py < e.y + halfY);
 }
 
-void Renderer::Render(SDL_Window* window, std::vector<Entity>& entities, std::vector<Particle>& particles, const Camera& cam, int& selected, std::vector<std::vector<Entity>>& undoStack) {
+void Renderer::Render(SDL_Window* window, std::vector<Entity>& entities, std::vector<Particle>& particles, const Camera& cam, int& selected, std::vector<std::vector<Entity>>& undoStack, bool& saveRequested) {
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplSDL2_NewFrame();
     ImGui::NewFrame();
@@ -303,7 +303,7 @@ void Renderer::Render(SDL_Window* window, std::vector<Entity>& entities, std::ve
     ImGui::SetNextWindowPos(ImVec2(0, 0));
     ImGui::SetNextWindowSize(ImVec2(leftPanelWidth, (float)winH));
     ImGui::Begin("Hierarchy", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
-    if (ImGui::Button("Save", ImVec2(-1, 0))) { /* Save logic */ } 
+    if (ImGui::Button("Save", ImVec2(-1, 0))) { saveRequested = true; }
     ImGui::TextDisabled("Entities");
     ImGui::Separator();
     for (int i = 0; i < (int)entities.size(); i++) {

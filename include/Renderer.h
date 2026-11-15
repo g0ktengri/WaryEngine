@@ -15,7 +15,7 @@ public:
     ~Renderer();
 
     void Init(SDL_Window* window);
-    void Render(SDL_Window* window, std::vector<Entity>& entities, std::vector<Particle>& particles, const Camera& cam, int& selectedEntityIndex, std::vector<std::vector<Entity>>& undoStack);
+    void Render(SDL_Window* window, std::vector<Entity>& entities, std::vector<Particle>& particles, const Camera& cam, int& selectedEntityIndex, std::vector<std::vector<Entity>>& undoStack, bool& saveRequested);
     void RefreshTextures();
 
     // Helpers
