@@ -185,6 +185,13 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
         if (ImGui::Button("Rotate")) gizmo.mode = GizmoMode::Rotate;
         if (isRotate) ImGui::PopStyleColor();
 
+        ImGui::SameLine();
+
+        bool isScale = (gizmo.mode == GizmoMode::Scale);
+        if (isScale) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.94f, 0.50f, 0.09f, 1.00f));
+        if (ImGui::Button("Scale")) gizmo.mode = GizmoMode::Scale;
+        if (isScale) ImGui::PopStyleColor();
+
         ImGui::End();
     }
 
