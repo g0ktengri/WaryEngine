@@ -37,3 +37,6 @@ Desktop.ini
 
 # Logs
 *.log
+
+# Dear ImGui runtime-generated window/dock layout
+imgui.ini

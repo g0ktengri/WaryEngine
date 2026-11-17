@@ -1,5 +1,6 @@
 #include "EditorUI.h"
 #include "imgui.h"
+#include "imgui_internal.h" // DockBuilder* API: not yet promoted to the public imgui.h surface on this docking-branch version.
 #include "imgui_impl_sdl2.h"
 #include "imgui_impl_opengl3.h"
 #include <filesystem>
@@ -17,6 +18,7 @@ void EditorUI::Init(SDL_Window* window, SDL_GLContext ctx) {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     if (std::filesystem::exists("C:/Windows/Fonts/segoeui.ttf")) {
         io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/segoeui.ttf", 20.0f);
     }
@@ -40,13 +42,44 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
 
     int winW, winH;
     SDL_GetWindowSize(window, &winW, &winH);
-    float leftPanelWidth = winW * 0.2f;
-    float rightPanelWidth = winW * 0.25f;
-    float sceneX = leftPanelWidth;
-    float sceneY = 0.0f;
-    float sceneW = winW - leftPanelWidth - rightPanelWidth;
-    float sceneH = (float)winH;
-    ViewportRect viewport{sceneX, sceneY, sceneW, sceneH};
+
+    // --- DockSpace host + default first-run layout ---
+    // Stable ID computed independent of any window's ID stack (ImGui::GetID() needs a
+    // current window, which doesn't exist yet this early in the frame) so it's identical
+    // every frame and can be used both to query DockBuilder state and to feed DockSpaceOverViewport().
+    ImGuiID dockspaceId = ImHashStr("WaryEditorDockSpace");
+
+    if (ImGui::DockBuilderGetNode(dockspaceId) == nullptr) {
+        // First run (no saved layout for this dockspace yet): lay out Hierarchy left (~20%),
+        // Inspector right (~25%), everything else left as the implicit central node (the scene).
+        ImGui::DockBuilderRemoveNode(dockspaceId);
+        ImGui::DockBuilderAddNode(dockspaceId, (ImGuiDockNodeFlags)((int)ImGuiDockNodeFlags_DockSpace | (int)ImGuiDockNodeFlags_PassthruCentralNode));
+        ImGui::DockBuilderSetNodeSize(dockspaceId, ImVec2((float)winW, (float)winH));
+
+        ImGuiID centerId = dockspaceId;
+        ImGuiID leftId = ImGui::DockBuilderSplitNode(centerId, ImGuiDir_Left, 0.20f, nullptr, &centerId);
+        // centerId is now the remaining 80%; split off 0.3125 of THAT so the right panel is
+        // 25% of the *total* width (0.3125 * 0.80 == 0.25), leaving a true 55% central node.
+        ImGuiID rightId = ImGui::DockBuilderSplitNode(centerId, ImGuiDir_Right, 0.3125f, nullptr, &centerId);
+
+        ImGui::DockBuilderDockWindow("Hierarchy", leftId);
+        ImGui::DockBuilderDockWindow("Inspector", rightId);
+        ImGui::DockBuilderFinish(dockspaceId);
+    }
+
+    ImGui::DockSpaceOverViewport(dockspaceId, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
+
+    // Central dock node's live on-screen Pos/Size *is* the scene viewport. Queried fresh every
+    // frame (not just on first-run) so it tracks drags/resizes/re-docks as the user does them.
+    ImGuiDockNode* centralNode = ImGui::DockBuilderGetCentralNode(dockspaceId);
+    ViewportRect viewport;
+    if (centralNode) {
+        viewport = ViewportRect{centralNode->Pos.x, centralNode->Pos.y, centralNode->Size.x, centralNode->Size.y};
+    } else {
+        // Shouldn't happen given the layout above always keeps an implicit central node, but
+        // fall back to the full window rather than an uninitialized/garbage viewport.
+        viewport = ViewportRect{0.0f, 0.0f, (float)winW, (float)winH};
+    }
 
     int mx, my;
     SDL_GetMouseState(&mx, &my);
@@ -79,12 +112,12 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
 
     // --- Input / Picking ---
     if (!gizmoActive && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::GetIO().WantCaptureMouse) {
-        float localMx = mx - sceneX;
+        float localMx = mx - viewport.x;
         float localMy = my - viewport.y;
-        if (localMx >= 0 && localMx <= sceneW && localMy >= 0 && localMy <= sceneH) {
-             float aspect = sceneW / sceneH;
-             float ndcX = (localMx / sceneW) * 2.0f - 1.0f;
-             float ndcY = 1.0f - (localMy / sceneH) * 2.0f;
+        if (localMx >= 0 && localMx <= viewport.width && localMy >= 0 && localMy <= viewport.height) {
+             float aspect = viewport.width / viewport.height;
+             float ndcX = (localMx / viewport.width) * 2.0f - 1.0f;
+             float ndcY = 1.0f - (localMy / viewport.height) * 2.0f;
              float wx = ndcX * aspect / cam.zoom + cam.x;
              float wy = ndcY / cam.zoom + cam.y;
 
@@ -99,9 +132,7 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
 
     // --- UI Draw ---
     // Hierarchy
-    ImGui::SetNextWindowPos(ImVec2(0, 0));
-    ImGui::SetNextWindowSize(ImVec2(leftPanelWidth, (float)winH));
-    ImGui::Begin("Hierarchy", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+    ImGui::Begin("Hierarchy", nullptr, ImGuiWindowFlags_NoCollapse);
     if (ImGui::Button("Save", ImVec2(-1, 0))) { saveRequested = true; }
     ImGui::TextDisabled("Entities");
     ImGui::Separator();
@@ -116,9 +147,7 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
     ImGui::End();
 
     // Inspector
-    ImGui::SetNextWindowPos(ImVec2((float)winW - rightPanelWidth, 0));
-    ImGui::SetNextWindowSize(ImVec2(rightPanelWidth, (float)winH));
-    ImGui::Begin("Inspector", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+    ImGui::Begin("Inspector", nullptr, ImGuiWindowFlags_NoCollapse);
     if (selected >= 0 && selected < (int)entities.size()) {
         Entity &e = entities[selected];
         ImGui::Text("Properties");
@@ -171,7 +200,7 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
 
     // Gizmo mode toolbar — overlaid at the top of the scene viewport, only while something is selected.
     if (selected >= 0 && selected < (int)entities.size()) {
-        ImGui::SetNextWindowPos(ImVec2(sceneX + 10, 10));
+        ImGui::SetNextWindowPos(ImVec2(viewport.x + 10, viewport.y + 10));
         ImGui::Begin("GizmoToolbar", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove);
 
         bool isMove = (gizmo.mode == GizmoMode::Move);
@@ -197,7 +226,7 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
     }
 
     // Tips
-    ImGui::SetNextWindowPos(ImVec2(leftPanelWidth + 10, (float)winH - 60));
+    ImGui::SetNextWindowPos(ImVec2(viewport.x + 10, viewport.y + viewport.height - 60));
     ImGui::Begin("Tips", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoBackground);
     ImGui::TextColored(ImVec4(1,1,1,0.5f), "WASD-Move | Space-Particle | Middle-Pan | Scroll-Zoom");
     ImGui::End();
