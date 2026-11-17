@@ -56,7 +56,7 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
         gizmo.Draw(ImGui::GetForegroundDrawList(), entities[selected], cam, viewport);
         gizmoActive = gizmo.Update(entities[selected], cam, viewport,
                                     ImGui::IsMouseDown(ImGuiMouseButton_Left),
-                                    ImGui::IsMouseClicked(ImGuiMouseButton_Left),
+                                    ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::GetIO().WantCaptureMouse,
                                     ImGui::IsMouseReleased(ImGuiMouseButton_Left),
                                     (float)mx, (float)my);
     }
