@@ -99,7 +99,7 @@ void Gizmo::Draw(ImDrawList* drawList, const Entity& entity, const Camera& cam, 
         ImVec2 center;
         float ringRadius = ComputeRotateRingRadius(entity, cam, viewport, center);
 
-        drawList->PushClipRect(ImVec2(viewport.x, 0.0f), ImVec2(viewport.x + viewport.width, viewport.height), true);
+        drawList->PushClipRect(ImVec2(viewport.x, viewport.y), ImVec2(viewport.x + viewport.width, viewport.y + viewport.height), true);
         drawList->AddCircle(center, ringRadius, IM_COL32(255, 220, 0, 255), 0, 2.0f);
         drawList->PopClipRect();
         return;
@@ -109,7 +109,7 @@ void Gizmo::Draw(ImDrawList* drawList, const Entity& entity, const Camera& cam, 
         ImVec2 handles[8];
         ComputeScaleHandlePositions(entity, cam, viewport, handles);
 
-        drawList->PushClipRect(ImVec2(viewport.x, 0.0f), ImVec2(viewport.x + viewport.width, viewport.height), true);
+        drawList->PushClipRect(ImVec2(viewport.x, viewport.y), ImVec2(viewport.x + viewport.width, viewport.y + viewport.height), true);
         for (int i = 0; i < 8; i++) {
             drawList->AddRectFilled(ImVec2(handles[i].x - kScaleHandleHalfSize, handles[i].y - kScaleHandleHalfSize),
                                      ImVec2(handles[i].x + kScaleHandleHalfSize, handles[i].y + kScaleHandleHalfSize),
@@ -122,7 +122,7 @@ void Gizmo::Draw(ImDrawList* drawList, const Entity& entity, const Camera& cam, 
     ImVec2 center, xTip, yTip;
     ComputeHandlePositions(entity, cam, viewport, center, xTip, yTip);
 
-    drawList->PushClipRect(ImVec2(viewport.x, 0.0f), ImVec2(viewport.x + viewport.width, viewport.height), true);
+    drawList->PushClipRect(ImVec2(viewport.x, viewport.y), ImVec2(viewport.x + viewport.width, viewport.y + viewport.height), true);
 
     drawList->AddLine(center, xTip, IM_COL32(255, 0, 0, 255), 2.0f);
     drawList->AddLine(center, yTip, IM_COL32(0, 255, 0, 255), 2.0f);
@@ -148,7 +148,7 @@ bool Gizmo::Update(Entity& entity, const Camera& cam, const ViewportRect& viewpo
 
         // Hit-testing must stay inside the scene viewport, mirroring the clip rect used in Draw().
         bool insideViewport = (mouseScreenX >= viewport.x && mouseScreenX <= viewport.x + viewport.width &&
-                                mouseScreenY >= 0.0f && mouseScreenY <= viewport.height);
+                                mouseScreenY >= viewport.y && mouseScreenY <= viewport.y + viewport.height);
 
         if (mouseClicked && !dragging && insideViewport) {
             int handle = -1;
@@ -216,7 +216,7 @@ bool Gizmo::Update(Entity& entity, const Camera& cam, const ViewportRect& viewpo
 
         // Hit-testing must stay inside the scene viewport, mirroring the clip rect used in Draw().
         bool insideViewport = (mouseScreenX >= viewport.x && mouseScreenX <= viewport.x + viewport.width &&
-                                mouseScreenY >= 0.0f && mouseScreenY <= viewport.height);
+                                mouseScreenY >= viewport.y && mouseScreenY <= viewport.y + viewport.height);
 
         if (mouseClicked && !dragging && insideViewport) {
             float mdx = mouseScreenX - center.x;
@@ -255,7 +255,7 @@ bool Gizmo::Update(Entity& entity, const Camera& cam, const ViewportRect& viewpo
     // a handle that's clipped out of view (e.g. panned behind the Hierarchy/Inspector panels)
     // must not still be grabbable there.
     bool insideViewport = (mouseScreenX >= viewport.x && mouseScreenX <= viewport.x + viewport.width &&
-                            mouseScreenY >= 0.0f && mouseScreenY <= viewport.height);
+                            mouseScreenY >= viewport.y && mouseScreenY <= viewport.y + viewport.height);
 
     if (mouseClicked && !dragging && insideViewport) {
         ImVec2 mousePos(mouseScreenX, mouseScreenY);
