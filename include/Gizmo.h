@@ -31,6 +31,7 @@ private:
     float dragStartRotation = 0.0f;
     float dragStartSx = 0.0f;
     float dragStartSy = 0.0f;
+    float dragStartAngle = 0.0f;
 };
 
 #endif

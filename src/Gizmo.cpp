@@ -30,6 +30,21 @@ namespace {
     const float kCenterHalfSize = 6.0f;
     const float kCenterHitHalfSize = 14.0f;
 
+    // Fixed padding beyond the entity's on-screen half-diagonal, per the brief.
+    const float kRotateRingPadding = 15.0f;
+    // Hit-band half-width around the ring radius — generous like kArrowHitHalfWidth,
+    // so clicking anywhere near the visible ring (not just pixel-perfect on it) grabs it.
+    const float kRotateRingHitHalfWidth = 10.0f;
+
+    // Keeps Draw() and Update() agreeing on where the rotate ring is.
+    float ComputeRotateRingRadius(const Entity& entity, const Camera& cam, const ViewportRect& viewport,
+                                   ImVec2& outCenter) {
+        outCenter = WorldToScreen(entity.x, entity.y, cam, viewport);
+        ImVec2 corner = WorldToScreen(entity.x + entity.sx * 0.5f, entity.y + entity.sy * 0.5f, cam, viewport);
+        float dx = corner.x - outCenter.x, dy = corner.y - outCenter.y;
+        return std::sqrt(dx * dx + dy * dy) + kRotateRingPadding;
+    }
+
     // Keeps Draw() and Update() agreeing on where the handles are.
     void ComputeHandlePositions(const Entity& entity, const Camera& cam, const ViewportRect& viewport,
                                  ImVec2& outCenter, ImVec2& outXTip, ImVec2& outYTip) {
@@ -54,7 +69,17 @@ namespace {
 }
 
 void Gizmo::Draw(ImDrawList* drawList, const Entity& entity, const Camera& cam, const ViewportRect& viewport) {
-    if (mode != GizmoMode::Move) return;
+    if (mode != GizmoMode::Move && mode != GizmoMode::Rotate) return;
+
+    if (mode == GizmoMode::Rotate) {
+        ImVec2 center;
+        float ringRadius = ComputeRotateRingRadius(entity, cam, viewport, center);
+
+        drawList->PushClipRect(ImVec2(viewport.x, 0.0f), ImVec2(viewport.x + viewport.width, viewport.height), true);
+        drawList->AddCircle(center, ringRadius, IM_COL32(255, 220, 0, 255), 0, 2.0f);
+        drawList->PopClipRect();
+        return;
+    }
 
     ImVec2 center, xTip, yTip;
     ComputeHandlePositions(entity, cam, viewport, center, xTip, yTip);
@@ -73,10 +98,48 @@ void Gizmo::Draw(ImDrawList* drawList, const Entity& entity, const Camera& cam, 
 bool Gizmo::Update(Entity& entity, const Camera& cam, const ViewportRect& viewport,
                    bool mouseDown, bool mouseClicked, bool mouseReleased,
                    float mouseScreenX, float mouseScreenY) {
-    if (mode != GizmoMode::Move) {
+    if (mode != GizmoMode::Move && mode != GizmoMode::Rotate) {
         dragging = false;
         activeHandle = -1;
         return false;
+    }
+
+    if (mode == GizmoMode::Rotate) {
+        ImVec2 center;
+        float ringRadius = ComputeRotateRingRadius(entity, cam, viewport, center);
+
+        // Hit-testing must stay inside the scene viewport, mirroring the clip rect used in Draw().
+        bool insideViewport = (mouseScreenX >= viewport.x && mouseScreenX <= viewport.x + viewport.width &&
+                                mouseScreenY >= 0.0f && mouseScreenY <= viewport.height);
+
+        if (mouseClicked && !dragging && insideViewport) {
+            float mdx = mouseScreenX - center.x;
+            float mdy = mouseScreenY - center.y;
+            float distFromCenter = std::sqrt(mdx * mdx + mdy * mdy);
+            bool hitRing = std::fabs(distFromCenter - ringRadius) <= kRotateRingHitHalfWidth;
+
+            if (hitRing) {
+                dragging = true;
+                activeHandle = 3; // distinct marker; rotate doesn't use Move's 0/1/2 handle ids
+                float dragStartWorldX, dragStartWorldY;
+                ScreenToWorld(mouseScreenX, mouseScreenY, cam, viewport, dragStartWorldX, dragStartWorldY);
+                dragStartAngle = std::atan2(dragStartWorldY - entity.y, dragStartWorldX - entity.x);
+                dragStartRotation = entity.rotation;
+            }
+        }
+
+        if (dragging && mouseDown) {
+            float curWorldX, curWorldY;
+            ScreenToWorld(mouseScreenX, mouseScreenY, cam, viewport, curWorldX, curWorldY);
+            float currentAngle = std::atan2(curWorldY - entity.y, curWorldX - entity.x);
+            entity.rotation = dragStartRotation + (currentAngle - dragStartAngle);
+        }
+
+        if (!mouseDown || mouseReleased) {
+            dragging = false;
+        }
+
+        return dragging;
     }
 
     ImVec2 center, xTip, yTip;

@@ -168,6 +168,26 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
     }
     ImGui::End();
 
+    // Gizmo mode toolbar — overlaid at the top of the scene viewport, only while something is selected.
+    if (selected >= 0 && selected < (int)entities.size()) {
+        ImGui::SetNextWindowPos(ImVec2(sceneX + 10, 10));
+        ImGui::Begin("GizmoToolbar", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove);
+
+        bool isMove = (gizmo.mode == GizmoMode::Move);
+        if (isMove) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.94f, 0.50f, 0.09f, 1.00f));
+        if (ImGui::Button("Move")) gizmo.mode = GizmoMode::Move;
+        if (isMove) ImGui::PopStyleColor();
+
+        ImGui::SameLine();
+
+        bool isRotate = (gizmo.mode == GizmoMode::Rotate);
+        if (isRotate) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.94f, 0.50f, 0.09f, 1.00f));
+        if (ImGui::Button("Rotate")) gizmo.mode = GizmoMode::Rotate;
+        if (isRotate) ImGui::PopStyleColor();
+
+        ImGui::End();
+    }
+
     // Tips
     ImGui::SetNextWindowPos(ImVec2(leftPanelWidth + 10, (float)winH - 60));
     ImGui::Begin("Tips", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoBackground);
