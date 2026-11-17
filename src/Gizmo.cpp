@@ -1,4 +1,6 @@
 #include "Gizmo.h"
+#include <cmath>
+#include <algorithm>
 
 ImVec2 WorldToScreen(float worldX, float worldY, const Camera& cam, const ViewportRect& viewport) {
     float aspect = viewport.width / viewport.height;
@@ -22,9 +24,11 @@ void ScreenToWorld(float screenX, float screenY, const Camera& cam, const Viewpo
 
 namespace {
     const float kArrowLength = 60.0f;
-    const float kHandleHitRadius = 10.0f;
+    // Perpendicular hit-band half-width along each arrow's full line segment (not just its tip) —
+    // this is what makes the whole visible arrow clickable, not a tiny circle at one end of it.
+    const float kArrowHitHalfWidth = 8.0f;
     const float kCenterHalfSize = 6.0f;
-    const float kCenterHitHalfSize = 10.0f;
+    const float kCenterHitHalfSize = 14.0f;
 
     // Keeps Draw() and Update() agreeing on where the handles are.
     void ComputeHandlePositions(const Entity& entity, const Camera& cam, const ViewportRect& viewport,
@@ -32,6 +36,20 @@ namespace {
         outCenter = WorldToScreen(entity.x, entity.y, cam, viewport);
         outXTip = ImVec2(outCenter.x + kArrowLength, outCenter.y);
         outYTip = ImVec2(outCenter.x, outCenter.y - kArrowLength);
+    }
+
+    // Shortest distance from point p to the line segment [a, b] (clamped to the segment, not
+    // the infinite line), used to make an entire drawn arrow clickable along its length.
+    float DistancePointToSegment(const ImVec2& p, const ImVec2& a, const ImVec2& b) {
+        float abx = b.x - a.x, aby = b.y - a.y;
+        float apx = p.x - a.x, apy = p.y - a.y;
+        float lenSq = abx * abx + aby * aby;
+        float t = (lenSq > 0.0001f) ? (apx * abx + apy * aby) / lenSq : 0.0f;
+        t = std::max(0.0f, std::min(1.0f, t));
+        float closestX = a.x + t * abx;
+        float closestY = a.y + t * aby;
+        float dx = p.x - closestX, dy = p.y - closestY;
+        return std::sqrt(dx * dx + dy * dy);
     }
 }
 
@@ -71,12 +89,11 @@ bool Gizmo::Update(Entity& entity, const Camera& cam, const ViewportRect& viewpo
                             mouseScreenY >= 0.0f && mouseScreenY <= viewport.height);
 
     if (mouseClicked && !dragging && insideViewport) {
+        ImVec2 mousePos(mouseScreenX, mouseScreenY);
         bool hitCenter = (mouseScreenX >= center.x - kCenterHitHalfSize && mouseScreenX <= center.x + kCenterHitHalfSize &&
                            mouseScreenY >= center.y - kCenterHitHalfSize && mouseScreenY <= center.y + kCenterHitHalfSize);
-        float dxX = mouseScreenX - xTip.x, dyX = mouseScreenY - xTip.y;
-        bool hitX = (dxX * dxX + dyX * dyX) <= (kHandleHitRadius * kHandleHitRadius);
-        float dxY = mouseScreenX - yTip.x, dyY = mouseScreenY - yTip.y;
-        bool hitY = (dxY * dxY + dyY * dyY) <= (kHandleHitRadius * kHandleHitRadius);
+        bool hitX = DistancePointToSegment(mousePos, center, xTip) <= kArrowHitHalfWidth;
+        bool hitY = DistancePointToSegment(mousePos, center, yTip) <= kArrowHitHalfWidth;
 
         int handle = -1;
         if (hitCenter) handle = 2;
