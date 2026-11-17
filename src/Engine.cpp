@@ -2,6 +2,7 @@
 #include "Input.h"
 #include "imgui.h"
 #include "imgui_impl_sdl2.h"
+#include "imgui_impl_opengl3.h"
 #include <fstream>
 #include <iostream>
 #include <iomanip>
@@ -46,7 +47,11 @@ void Engine::Run() {
 
         Update();
         bool saveRequested = false;
-        renderer.Render(window, entities, particles, cam, selectedEntity, undoStack, saveRequested);
+        ViewportRect viewport = editorUI.Draw(window, entities, cam, selectedEntity, undoStack, saveRequested, renderer.GetTextureList());
+        renderer.Render(entities, particles, cam, viewport);
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        SDL_GL_SwapWindow(window);
         if (saveRequested) SaveScene();
     }
 }

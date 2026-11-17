@@ -3,6 +3,7 @@
 #include "imgui_impl_sdl2.h"
 #include "imgui_impl_opengl3.h"
 #include <filesystem>
+#include <cstring>
 
 EditorUI::EditorUI() {}
 
@@ -22,6 +23,144 @@ void EditorUI::Init(SDL_Window* window, SDL_GLContext ctx) {
     SetupUIStyle();
     ImGui_ImplSDL2_InitForOpenGL(window, ctx);
     ImGui_ImplOpenGL3_Init("#version 330");
+}
+
+bool EditorUI::CheckPointInside(Entity &e, float px, float py) {
+    float halfX = e.sx / 2.0f;
+    float halfY = e.sy / 2.0f;
+    return (px > e.x - halfX && px < e.x + halfX && py > e.y - halfY && py < e.y + halfY);
+}
+
+ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, const Camera& cam,
+                             int& selected, std::vector<std::vector<Entity>>& undoStack,
+                             bool& saveRequested, const std::vector<std::string>& textureList) {
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplSDL2_NewFrame();
+    ImGui::NewFrame();
+
+    // Undo Logic - Capture state before edit
+    if (ImGui::IsAnyItemActive()) {
+        if (!wasActive) {
+            preEditState = entities;
+            wasActive = true;
+        }
+    } else {
+        if (wasActive) {
+            undoStack.push_back(preEditState);
+            if (undoStack.size() > 50) undoStack.erase(undoStack.begin());
+            wasActive = false;
+        }
+    }
+
+    int winW, winH;
+    SDL_GetWindowSize(window, &winW, &winH);
+    float leftPanelWidth = winW * 0.2f;
+    float rightPanelWidth = winW * 0.25f;
+    float sceneX = leftPanelWidth;
+    float sceneW = winW - leftPanelWidth - rightPanelWidth;
+    float sceneH = (float)winH;
+
+    // --- Input / Picking ---
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::GetIO().WantCaptureMouse) {
+        int mx, my;
+        SDL_GetMouseState(&mx, &my);
+        float localMx = mx - sceneX;
+        float localMy = my;
+        if (localMx >= 0 && localMx <= sceneW && localMy >= 0 && localMy <= sceneH) {
+             float aspect = sceneW / sceneH;
+             float ndcX = (localMx / sceneW) * 2.0f - 1.0f;
+             float ndcY = 1.0f - (localMy / sceneH) * 2.0f;
+             float wx = ndcX * aspect / cam.zoom + cam.x;
+             float wy = ndcY / cam.zoom + cam.y;
+
+             for (int k = (int)entities.size() - 1; k >= 0; k--) {
+                if (CheckPointInside(entities[k], wx, wy)) {
+                    selected = k;
+                    break;
+                }
+             }
+        }
+    }
+
+    // --- UI Draw ---
+    // Hierarchy
+    ImGui::SetNextWindowPos(ImVec2(0, 0));
+    ImGui::SetNextWindowSize(ImVec2(leftPanelWidth, (float)winH));
+    ImGui::Begin("Hierarchy", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+    if (ImGui::Button("Save", ImVec2(-1, 0))) { saveRequested = true; }
+    ImGui::TextDisabled("Entities");
+    ImGui::Separator();
+    for (int i = 0; i < (int)entities.size(); i++) {
+        if (ImGui::Selectable((entities[i].name + "##" + std::to_string(i)).c_str(), i == selected))
+            selected = i;
+    }
+    if (ImGui::Button("+ New Entity", ImVec2(-1, 30))) {
+        undoStack.push_back(entities); // Save before adding
+        entities.push_back({"Prop", cam.x, cam.y, 0, 0.3f, 0.3f, {1,1,1}, "default", true, false, 0});
+    }
+    ImGui::End();
+
+    // Inspector
+    ImGui::SetNextWindowPos(ImVec2((float)winW - rightPanelWidth, 0));
+    ImGui::SetNextWindowSize(ImVec2(rightPanelWidth, (float)winH));
+    ImGui::Begin("Inspector", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse);
+    if (selected >= 0 && selected < (int)entities.size()) {
+        Entity &e = entities[selected];
+        ImGui::Text("Properties");
+        ImGui::Separator();
+        char nBuf[64]; strcpy(nBuf, e.name.c_str());
+        if (ImGui::InputText("Name", nBuf, 64)) e.name = nBuf;
+
+        if (ImGui::BeginCombo("Texture", e.textureName.c_str())) {
+            for (auto &texName : textureList) {
+                bool is_selected = (e.textureName == texName);
+                if (ImGui::Selectable(texName.c_str(), is_selected)) e.textureName = texName;
+                if (is_selected) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::DragFloat("Pos X", &e.x, 0.01f);
+        ImGui::DragFloat("Pos Y", &e.y, 0.01f);
+        ImGui::SliderFloat("Rot", &e.rotation, -3.14f, 3.14f);
+
+        ImGui::Separator();
+        ImGui::Text("Size");
+        static bool uniformScale = false;
+        ImGui::Checkbox("Uniform Scale", &uniformScale);
+
+        if (uniformScale) {
+            float ratio = e.sx / e.sy;
+            if (ImGui::DragFloat("Width (Locked)", &e.sx, 0.01f, 0.01f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+                if (ratio > 0.0001f) {
+                     e.sy = e.sx / ratio;
+                }
+            }
+            ImGui::TextDisabled("Height is locked to Width (Ratio: %.2f)", ratio);
+        } else {
+            ImGui::DragFloat("Width (X)", &e.sx, 0.01f, 0.01f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            ImGui::DragFloat("Height (Y)", &e.sy, 0.01f, 0.01f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+        }
+        ImGui::Separator();
+
+        ImGui::ColorEdit3("Color", e.color);
+        ImGui::Checkbox("Gravity", &e.hasGravity);
+        ImGui::Checkbox("Is Static", &e.isStatic);
+        ImGui::Dummy(ImVec2(0, 20));
+        if (ImGui::Button("DELETE ENTITY", ImVec2(-1, 30))) {
+            undoStack.push_back(entities); // Save state before delete
+            entities.erase(entities.begin() + selected);
+            selected = 0;
+        }
+    }
+    ImGui::End();
+
+    // Tips
+    ImGui::SetNextWindowPos(ImVec2(leftPanelWidth + 10, (float)winH - 60));
+    ImGui::Begin("Tips", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoBackground);
+    ImGui::TextColored(ImVec4(1,1,1,0.5f), "WASD-Move | Space-Particle | Middle-Pan | Scroll-Zoom");
+    ImGui::End();
+
+    return ViewportRect{sceneX, sceneW, sceneH};
 }
 
 void EditorUI::SetupUIStyle() {

@@ -7,6 +7,7 @@
 #include <map>
 #include <string>
 #include "Entity.h"
+#include "EditorUI.h"
 
 // Simple Renderer class to handle OpenGL calls
 class Renderer {
@@ -15,7 +16,7 @@ public:
     ~Renderer();
 
     void Init();
-    void Render(SDL_Window* window, std::vector<Entity>& entities, std::vector<Particle>& particles, const Camera& cam, int& selectedEntityIndex, std::vector<std::vector<Entity>>& undoStack, bool& saveRequested);
+    void Render(std::vector<Entity>& entities, std::vector<Particle>& particles, const Camera& cam, const ViewportRect& viewport);
     void RefreshTextures();
 
     // Helpers
@@ -43,7 +44,6 @@ private:
     // Math helpers
     void CreateTransform(float* m, float x, float y, float r, float sx, float sy);
     void CreateView(float* m, Camera c, float aspect);
-    bool CheckPointInside(Entity& e, float px, float py);
 };
 
 #endif
