@@ -170,14 +170,24 @@ bool Gizmo::Update(Entity& entity, const Camera& cam, const ViewportRect& viewpo
                 dragStartEntityY = entity.y;
                 dragStartSx = entity.sx;
                 dragStartSy = entity.sy;
+                // Cache the grab-time mouse world position (reusing Move's dragStart* fields,
+                // unused by Scale otherwise) as the baseline distance-from-center to diff
+                // against each frame, so the drag is relative rather than absolute. This is
+                // what makes the grab frame itself a zero-change frame regardless of where
+                // within the handle's hit-box the user actually clicked.
+                ScreenToWorld(mouseScreenX, mouseScreenY, cam, viewport, dragStartMouseX, dragStartMouseY);
             }
         }
 
         if (dragging && mouseDown) {
             float curWorldX, curWorldY;
             ScreenToWorld(mouseScreenX, mouseScreenY, cam, viewport, curWorldX, curWorldY);
-            float newHalfX = std::fabs(curWorldX - dragStartEntityX);
-            float newHalfY = std::fabs(curWorldY - dragStartEntityY);
+            float curHalfX = std::fabs(curWorldX - dragStartEntityX);
+            float curHalfY = std::fabs(curWorldY - dragStartEntityY);
+            float startHalfX = std::fabs(dragStartMouseX - dragStartEntityX);
+            float startHalfY = std::fabs(dragStartMouseY - dragStartEntityY);
+            float newHalfX = dragStartSx * 0.5f + (curHalfX - startHalfX);
+            float newHalfY = dragStartSy * 0.5f + (curHalfY - startHalfY);
 
             bool isCorner = (activeHandle >= 10 && activeHandle <= 13);
             bool isTopOrBottomMid = (activeHandle == 14 || activeHandle == 15);
