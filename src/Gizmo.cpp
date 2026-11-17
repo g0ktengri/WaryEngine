@@ -64,7 +64,13 @@ bool Gizmo::Update(Entity& entity, const Camera& cam, const ViewportRect& viewpo
     ImVec2 center, xTip, yTip;
     ComputeHandlePositions(entity, cam, viewport, center, xTip, yTip);
 
-    if (mouseClicked && !dragging) {
+    // Hit-testing must stay inside the scene viewport, mirroring the clip rect used in Draw():
+    // a handle that's clipped out of view (e.g. panned behind the Hierarchy/Inspector panels)
+    // must not still be grabbable there.
+    bool insideViewport = (mouseScreenX >= viewport.x && mouseScreenX <= viewport.x + viewport.width &&
+                            mouseScreenY >= 0.0f && mouseScreenY <= viewport.height);
+
+    if (mouseClicked && !dragging && insideViewport) {
         bool hitCenter = (mouseScreenX >= center.x - kCenterHitHalfSize && mouseScreenX <= center.x + kCenterHitHalfSize &&
                            mouseScreenY >= center.y - kCenterHitHalfSize && mouseScreenY <= center.y + kCenterHitHalfSize);
         float dxX = mouseScreenX - xTip.x, dyX = mouseScreenY - xTip.y;
