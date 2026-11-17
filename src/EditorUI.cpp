@@ -38,8 +38,32 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
     ImGui_ImplSDL2_NewFrame();
     ImGui::NewFrame();
 
+    int winW, winH;
+    SDL_GetWindowSize(window, &winW, &winH);
+    float leftPanelWidth = winW * 0.2f;
+    float rightPanelWidth = winW * 0.25f;
+    float sceneX = leftPanelWidth;
+    float sceneW = winW - leftPanelWidth - rightPanelWidth;
+    float sceneH = (float)winH;
+    ViewportRect viewport{sceneX, sceneW, sceneH};
+
+    int mx, my;
+    SDL_GetMouseState(&mx, &my);
+
+    // --- Gizmo (claims its own clicks before entity-picking runs) ---
+    bool gizmoActive = false;
+    if (selected >= 0 && selected < (int)entities.size()) {
+        gizmo.Draw(ImGui::GetForegroundDrawList(), entities[selected], cam, viewport);
+        gizmoActive = gizmo.Update(entities[selected], cam, viewport,
+                                    ImGui::IsMouseDown(ImGuiMouseButton_Left),
+                                    ImGui::IsMouseClicked(ImGuiMouseButton_Left),
+                                    ImGui::IsMouseReleased(ImGuiMouseButton_Left),
+                                    (float)mx, (float)my);
+    }
+
     // Undo Logic - Capture state before edit
-    if (ImGui::IsAnyItemActive()) {
+    bool editing = ImGui::IsAnyItemActive() || gizmoActive;
+    if (editing) {
         if (!wasActive) {
             preEditState = entities;
             wasActive = true;
@@ -52,18 +76,8 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
         }
     }
 
-    int winW, winH;
-    SDL_GetWindowSize(window, &winW, &winH);
-    float leftPanelWidth = winW * 0.2f;
-    float rightPanelWidth = winW * 0.25f;
-    float sceneX = leftPanelWidth;
-    float sceneW = winW - leftPanelWidth - rightPanelWidth;
-    float sceneH = (float)winH;
-
     // --- Input / Picking ---
-    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::GetIO().WantCaptureMouse) {
-        int mx, my;
-        SDL_GetMouseState(&mx, &my);
+    if (!gizmoActive && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::GetIO().WantCaptureMouse) {
         float localMx = mx - sceneX;
         float localMy = my;
         if (localMx >= 0 && localMx <= sceneW && localMy >= 0 && localMy <= sceneH) {
@@ -160,7 +174,7 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
     ImGui::TextColored(ImVec4(1,1,1,0.5f), "WASD-Move | Space-Particle | Middle-Pan | Scroll-Zoom");
     ImGui::End();
 
-    return ViewportRect{sceneX, sceneW, sceneH};
+    return viewport;
 }
 
 void EditorUI::SetupUIStyle() {

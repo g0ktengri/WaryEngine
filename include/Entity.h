@@ -26,4 +26,8 @@ struct Camera {
     float x = 0, y = 0, zoom = 1.0f;
 };
 
+struct ViewportRect {
+    float x, width, height;
+};
+
 #endif

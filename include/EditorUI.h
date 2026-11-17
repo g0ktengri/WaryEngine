@@ -5,10 +5,7 @@
 #include <vector>
 #include <string>
 #include "Entity.h"
-
-struct ViewportRect {
-    float x, width, height;
-};
+#include "Gizmo.h"
 
 class EditorUI {
 public:
@@ -26,6 +23,7 @@ private:
 
     bool wasActive = false;
     std::vector<Entity> preEditState;
+    Gizmo gizmo;
 };
 
 #endif

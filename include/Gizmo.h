@@ -3,7 +3,6 @@
 
 #include "imgui.h"
 #include "Entity.h"
-#include "EditorUI.h"
 
 enum class GizmoMode { Move, Rotate, Scale };
 
