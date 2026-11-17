@@ -7,7 +7,7 @@ ImVec2 WorldToScreen(float worldX, float worldY, const Camera& cam, const Viewpo
     float ndcX = (worldX - cam.x) * cam.zoom / aspect;
     float ndcY = (worldY - cam.y) * cam.zoom;
     float screenX = (ndcX + 1.0f) / 2.0f * viewport.width + viewport.x;
-    float screenY = (1.0f - ndcY) / 2.0f * viewport.height;
+    float screenY = viewport.y + (1.0f - ndcY) / 2.0f * viewport.height;
     return ImVec2(screenX, screenY);
 }
 
@@ -15,7 +15,7 @@ void ScreenToWorld(float screenX, float screenY, const Camera& cam, const Viewpo
                    float& outWorldX, float& outWorldY) {
     float aspect = viewport.width / viewport.height;
     float localX = screenX - viewport.x;
-    float localY = screenY;
+    float localY = screenY - viewport.y;
     float ndcX = (localX / viewport.width) * 2.0f - 1.0f;
     float ndcY = 1.0f - (localY / viewport.height) * 2.0f;
     outWorldX = ndcX * aspect / cam.zoom + cam.x;

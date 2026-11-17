@@ -48,7 +48,9 @@ void Engine::Run() {
         Update();
         bool saveRequested = false;
         ViewportRect viewport = editorUI.Draw(window, entities, cam, selectedEntity, undoStack, saveRequested, renderer.GetTextureList());
-        renderer.Render(entities, particles, cam, viewport);
+        int winW, winH;
+        SDL_GetWindowSize(window, &winW, &winH);
+        renderer.Render(entities, particles, cam, viewport, winH);
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         SDL_GL_SwapWindow(window);

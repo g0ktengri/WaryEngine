@@ -16,7 +16,7 @@ public:
     ~Renderer();
 
     void Init();
-    void Render(std::vector<Entity>& entities, std::vector<Particle>& particles, const Camera& cam, const ViewportRect& viewport);
+    void Render(std::vector<Entity>& entities, std::vector<Particle>& particles, const Camera& cam, const ViewportRect& viewport, int windowHeight);
     void RefreshTextures();
 
     // Helpers

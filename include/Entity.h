@@ -27,7 +27,7 @@ struct Camera {
 };
 
 struct ViewportRect {
-    float x, width, height;
+    float x, y, width, height;
 };
 
 #endif

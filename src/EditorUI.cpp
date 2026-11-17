@@ -43,9 +43,10 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
     float leftPanelWidth = winW * 0.2f;
     float rightPanelWidth = winW * 0.25f;
     float sceneX = leftPanelWidth;
+    float sceneY = 0.0f;
     float sceneW = winW - leftPanelWidth - rightPanelWidth;
     float sceneH = (float)winH;
-    ViewportRect viewport{sceneX, sceneW, sceneH};
+    ViewportRect viewport{sceneX, sceneY, sceneW, sceneH};
 
     int mx, my;
     SDL_GetMouseState(&mx, &my);
@@ -79,7 +80,7 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
     // --- Input / Picking ---
     if (!gizmoActive && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::GetIO().WantCaptureMouse) {
         float localMx = mx - sceneX;
-        float localMy = my;
+        float localMy = my - viewport.y;
         if (localMx >= 0 && localMx <= sceneW && localMy >= 0 && localMy <= sceneH) {
              float aspect = sceneW / sceneH;
              float ndcX = (localMx / sceneW) * 2.0f - 1.0f;

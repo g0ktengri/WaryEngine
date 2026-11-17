@@ -225,11 +225,12 @@ void Renderer::CreateView(float *m, Camera c, float aspect) {
     m[3] = 0;               m[7] = 0;      m[11] = 0; m[15] = 1;
 }
 
-void Renderer::Render(std::vector<Entity>& entities, std::vector<Particle>& particles, const Camera& cam, const ViewportRect& viewport) {
+void Renderer::Render(std::vector<Entity>& entities, std::vector<Particle>& particles, const Camera& cam, const ViewportRect& viewport, int windowHeight) {
     glClearColor(0.12f, 0.12f, 0.15f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    glViewport((int)viewport.x, 0, (int)viewport.width, (int)viewport.height);
+    int glY = (int)(windowHeight - viewport.y - viewport.height);
+    glViewport((int)viewport.x, glY, (int)viewport.width, (int)viewport.height);
     glUseProgram(shaderProgram);
 
     float vm[16];
