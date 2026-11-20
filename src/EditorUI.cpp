@@ -15,6 +15,18 @@
 static const ImVec4 kAccentColor     = ImVec4(0.82f, 0.18f, 0.16f, 1.00f);
 static const ImVec4 kAccentColorDark = ImVec4(0.74f, 0.16f, 0.14f, 1.00f);
 
+// GizmoToolbar-only "floating glass chip" treatment. Composition call (confirmed live with the
+// user against two alternative mockups): Hierarchy/Inspector/Scene should read as flush,
+// edge-to-edge sidebars/world -- ONE cohesive window, not a stack of separate rounded cards -- so
+// the heavier rounding + translucency + sheen from an earlier pass was pulled back off of them and
+// concentrated here instead, on the one element that is genuinely a floating overlay drawn on top
+// of the scene rather than a docked panel. Scoped to GizmoToolbar via PushStyleVar/PushStyleColor
+// around its Begin/End rather than folding into the global style, so it doesn't leak onto
+// Hierarchy/Inspector/Scene.
+static const float kToolbarWindowRounding = 10.0f;
+static const float kToolbarFrameRounding  = 8.0f;
+static const ImVec4 kToolbarGlassBg       = ImVec4(0.26f, 0.26f, 0.27f, 0.55f);
+
 // Builds the default dockspace layout (Hierarchy left ~20%, Inspector right ~25%, central node for
 // "Scene") from scratch. Assumes dockspaceId has no existing node (or that the caller just removed
 // one), same precondition the original first-run-only block had. Factored out so it can be called
@@ -55,13 +67,20 @@ static void SpawnNewEntity(std::vector<Entity>& entities, const Camera& cam,
     entities.push_back({"Prop", cam.x, cam.y, 0, 0.3f, 0.3f, {1,1,1}, "default", true, false, 0});
 }
 
-// Draws the "glass" theme's one deliberately-allowed gradient: a faint light sheen across the top
-// edge of a chrome panel (Hierarchy/Inspector/GizmoToolbar), simulating light catching the top of
-// a glass surface. Fades from a low-alpha white at the panel's top edge to fully transparent by
-// heightFraction down the panel. Must be called right after Begin() (and before any other widget
-// calls) so it lands behind the panel's own content in the window's draw list, not on top of it.
-// Shared by all three call sites instead of repeating the AddRectFilledMultiColor call with
-// drift risk between them.
+// Draws the theme's one deliberately-allowed gradient: a faint light sheen across the top edge of
+// a floating glass surface, simulating light catching the top of real glass. Fades from a
+// low-alpha white at the top edge to fully transparent by heightFraction down. Must be called
+// right after Begin() (and before any other widget calls) so it lands behind the window's own
+// content in its draw list, not on top of it.
+//
+// Composition note: this used to also run on the docked Hierarchy/Inspector sidebars, but that
+// made each one read as its own separate floating rounded card instead of a flush, cohesive part
+// of the window (the exact "no figure-ground unity" problem live user feedback flagged) -- flush
+// sidebars in an Xcode/Finder-style composition don't get a sheen. It now runs on GizmoToolbar
+// only, which genuinely is a small floating glass chip drawn on top of the scene, not a docked
+// panel, so the effect is both visually and structurally honest there. Kept as a helper (even
+// though it's down to one call site for now) in case a future floating/overlay panel wants the
+// same effect without re-deriving the corner-inset math below.
 //
 // The quad is inset by the window's own rounding on the left/right (and half that on top) so its
 // flat corners stay within the window's straight edge instead of visibly squaring off past the
@@ -316,7 +335,6 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
     // --- UI Draw ---
     // Hierarchy
     ImGui::Begin("Hierarchy", nullptr, ImGuiWindowFlags_NoCollapse);
-    DrawGlassSheen();
     if (ImGui::Button("Save", ImVec2(-1, 0))) { saveRequested = true; }
     ImGui::TextDisabled("Entities");
     ImGui::Separator();
@@ -331,7 +349,6 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
 
     // Inspector
     ImGui::Begin("Inspector", nullptr, ImGuiWindowFlags_NoCollapse);
-    DrawGlassSheen();
     if (selected >= 0 && selected < (int)entities.size()) {
         Entity &e = entities[selected];
         ImGui::Text("Properties");
@@ -382,8 +399,16 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
     }
     ImGui::End();
 
-    // Gizmo mode toolbar — overlaid at the top of the scene viewport, only while something is selected.
+    // Gizmo mode toolbar — overlaid at the top of the scene viewport, only while something is
+    // selected. The one place in this UI that's genuinely a floating object over the scene (drawn
+    // via its own Begin positioned over the viewport, not docked into the layout), so it alone
+    // carries the "floating glass chip" treatment: meaningful rounding, a translucent background
+    // that actually blends with the rendered scene behind it, and the top-edge sheen. Style pushed
+    // around Begin/End only, so none of it leaks onto Hierarchy/Inspector/Scene.
     if (selected >= 0 && selected < (int)entities.size()) {
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, kToolbarWindowRounding);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, kToolbarFrameRounding);
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, kToolbarGlassBg);
         ImGui::SetNextWindowPos(ImVec2(viewport.x + 10, viewport.y + 10));
         ImGui::Begin("GizmoToolbar", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove);
         DrawGlassSheen();
@@ -408,6 +433,8 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
         if (isScale) ImGui::PopStyleColor();
 
         ImGui::End();
+        ImGui::PopStyleColor(); // kToolbarGlassBg
+        ImGui::PopStyleVar(2);  // kToolbarFrameRounding, kToolbarWindowRounding
     }
 
     // Tips
@@ -423,33 +450,44 @@ void EditorUI::SetupUIStyle() {
     ImGuiStyle& style = ImGui::GetStyle();
     ImVec4* colors = style.Colors;
 
-    // Softer, more generous rounding across the board -- "Apple-app soft" rather than the
-    // previous token rounding -- consistent with the glass/translucent chrome treatment below.
-    style.WindowRounding = 12.0f;
-    style.FrameRounding = 8.0f;
-    style.PopupRounding = 10.0f;
-    style.ScrollbarRounding = 8.0f;
-    style.GrabRounding = 8.0f;
-    style.TabRounding = 10.0f;
+    // Flush, square, Xcode/Finder-sidebar-style rounding by default -- an earlier pass bumped
+    // these up for a "soft Apple-app card" look, but live user feedback was that it broke
+    // figure-ground unity: Hierarchy/Inspector/Scene read as a stack of separate floating rounded
+    // cards instead of one cohesive window. Reverted to flush/near-zero here; the one place that
+    // still wants soft "floating glass chip" rounding (GizmoToolbar) now gets it via a scoped
+    // PushStyleVar around just that window instead of a global bump (see kToolbarWindowRounding).
+    style.WindowRounding = 0.0f;
+    style.FrameRounding = 4.0f;
+    style.PopupRounding = 4.0f;
+    style.ScrollbarRounding = 4.0f;
+    style.GrabRounding = 4.0f;
+    style.TabRounding = 4.0f;
 
     style.WindowPadding = ImVec2(10, 10);
     style.FramePadding = ImVec2(6, 4);
     style.ItemSpacing = ImVec2(8, 6);
     style.ScrollbarSize = 12.0f;
 
-    // Explicit (rather than relying on Dear ImGui's own default) so the glass-edge Border color
-    // below is guaranteed to actually render, not just be set.
+    // Thin (not removed -- a subtle hairline is still part of the chosen composition, just a much
+    // quieter one than the all-sides glow a previous pass gave it) and explicit, rather than
+    // relying on Dear ImGui's own default, so it's guaranteed to actually render.
     style.WindowBorderSize = 1.0f;
 
     colors[ImGuiCol_Text]                   = ImVec4(0.95f, 0.95f, 0.95f, 1.00f);
     colors[ImGuiCol_TextDisabled]           = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
-    // Translucent "glass" panel background -- alpha reduced from fully opaque so whatever's
-    // behind a panel (desktop, or another panel's edge) subtly shows through, the core glass cue.
-    colors[ImGuiCol_WindowBg]               = ImVec4(0.12f, 0.12f, 0.12f, 0.82f);
+    // Nearly opaque -- a previous pass dropped this to 0.82 for a visible "glass card" look, but
+    // Hierarchy/Inspector/Scene are flush sidebars/world in this composition, not floating
+    // translucent cards, so they read as solid, cohesive regions of one window. (Over this app's
+    // black GL clear color the two are nearly indistinguishable anyway; kept just shy of fully
+    // opaque so an undocked/floating panel -- the one case something could show through -- still
+    // reads as faintly glass rather than a hard cut.) The one place real translucency against a
+    // colorful backdrop belongs is GizmoToolbar's own scoped override (kToolbarGlassBg).
+    colors[ImGuiCol_WindowBg]               = ImVec4(0.12f, 0.12f, 0.12f, 0.97f);
     colors[ImGuiCol_ChildBg]                = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
     colors[ImGuiCol_PopupBg]                = ImVec4(0.08f, 0.08f, 0.08f, 0.94f);
-    // Light, low-alpha near-white -- reads as light catching a glass edge, not the old blue-gray.
-    colors[ImGuiCol_Border]                 = ImVec4(1.00f, 1.00f, 1.00f, 0.18f);
+    // Much quieter than a previous pass's (1,1,1,0.18): a subtle single hairline reading as where
+    // a sidebar meets the scene, not a glowing outline around every side of every panel.
+    colors[ImGuiCol_Border]                 = ImVec4(1.00f, 1.00f, 1.00f, 0.10f);
     colors[ImGuiCol_BorderShadow]           = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
     colors[ImGuiCol_FrameBg]                = ImVec4(0.20f, 0.21f, 0.22f, 0.54f);
     colors[ImGuiCol_FrameBgHovered]         = ImVec4(0.40f, 0.40f, 0.40f, 0.40f);
@@ -457,8 +495,9 @@ void EditorUI::SetupUIStyle() {
     colors[ImGuiCol_TitleBg]                = ImVec4(0.04f, 0.04f, 0.04f, 1.00f);
     colors[ImGuiCol_TitleBgActive]          = ImVec4(0.29f, 0.29f, 0.29f, 1.00f);
     colors[ImGuiCol_TitleBgCollapsed]       = ImVec4(0.00f, 0.00f, 0.00f, 0.51f);
-    // Same translucency treatment as the other chrome panels -- part of the same glass family.
-    colors[ImGuiCol_MenuBarBg]              = ImVec4(0.14f, 0.14f, 0.14f, 0.82f);
+    // Flat and solid -- the menu bar isn't part of the "glass" treatment in this composition
+    // either (that's concentrated on GizmoToolbar alone); back to fully opaque.
+    colors[ImGuiCol_MenuBarBg]              = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
     colors[ImGuiCol_ScrollbarBg]            = ImVec4(0.02f, 0.02f, 0.02f, 0.53f);
     colors[ImGuiCol_ScrollbarGrab]          = ImVec4(0.31f, 0.31f, 0.31f, 1.00f);
     colors[ImGuiCol_ScrollbarGrabHovered]   = ImVec4(0.41f, 0.41f, 0.41f, 1.00f);
@@ -472,11 +511,11 @@ void EditorUI::SetupUIStyle() {
     colors[ImGuiCol_Header]                 = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
     colors[ImGuiCol_HeaderHovered]          = ImVec4(0.35f, 0.35f, 0.35f, 1.00f);
     colors[ImGuiCol_HeaderActive]           = ImVec4(0.15f, 0.15f, 0.15f, 1.00f);
-    // Matches the new Border color (same glass-edge family) instead of the old blue-gray --
+    // Matches the new, quieter Border color (same hairline family) instead of the old blue-gray --
     // these previously shared that exact literal, so they stay in sync with it.
-    colors[ImGuiCol_Separator]              = ImVec4(1.00f, 1.00f, 1.00f, 0.18f);
-    colors[ImGuiCol_SeparatorHovered]       = ImVec4(1.00f, 1.00f, 1.00f, 0.18f);
-    colors[ImGuiCol_SeparatorActive]        = ImVec4(1.00f, 1.00f, 1.00f, 0.18f);
+    colors[ImGuiCol_Separator]              = ImVec4(1.00f, 1.00f, 1.00f, 0.10f);
+    colors[ImGuiCol_SeparatorHovered]       = ImVec4(1.00f, 1.00f, 1.00f, 0.10f);
+    colors[ImGuiCol_SeparatorActive]        = ImVec4(1.00f, 1.00f, 1.00f, 0.10f);
     colors[ImGuiCol_ResizeGrip]             = ImVec4(0.91f, 0.91f, 0.91f, 0.25f);
     colors[ImGuiCol_ResizeGripHovered]      = ImVec4(0.81f, 0.81f, 0.81f, 0.67f);
     colors[ImGuiCol_ResizeGripActive]       = ImVec4(0.46f, 0.46f, 0.46f, 0.95f);
