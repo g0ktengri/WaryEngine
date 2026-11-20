@@ -68,7 +68,19 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
         ImGui::DockBuilderFinish(dockspaceId);
     }
 
+    // WindowBg is pushed fully transparent for the DockSpaceOverViewport() call ONLY. Reason: with
+    // ImGuiDockNodeFlags_PassthruCentralNode, the dockspace root paints a WindowBg-colored fill over the
+    // whole dockspace and only cuts a transparent hole for the central node while that node is EMPTY
+    // (imgui.cpp DockNodeUpdate: central_node_hole requires central_node->IsEmpty(), else it does
+    // AddRectFilled over the entire root rect). Since "Scene" is now a real window docked into the central
+    // node, it is never empty, so that fill covered the OpenGL scene (grid/entities/particles, drawn by
+    // Renderer::Render before ImGui renders) with flat gray -- confirmed by reading the framebuffer at the
+    // scene's center: (186,49,50) right after Renderer::Render vs (31,31,31) == WindowBg after ImGui.
+    // That fill is drawn synchronously inside this call, so a scoped push affects only it; Hierarchy/
+    // Inspector's own backgrounds are drawn by their own Begin() later with the normal WindowBg.
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
     ImGui::DockSpaceOverViewport(dockspaceId, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
+    ImGui::PopStyleColor();
 
     // "Scene" is a window added after Hierarchy/Inspector already existed in this task's history, so an
     // existing imgui.ini saved by an older build (dockspace/Hierarchy/Inspector already laid out, no
