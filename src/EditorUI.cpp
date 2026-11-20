@@ -49,15 +49,15 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
     // every frame and can be used both to query DockBuilder state and to feed DockSpaceOverViewport().
     ImGuiID dockspaceId = ImHashStr("WaryEditorDockSpace");
 
-    bool wasFirstRun = (ImGui::DockBuilderGetNode(dockspaceId) == nullptr);
-    if (wasFirstRun) {
+    ImGuiID centerId = 0;
+    if (ImGui::DockBuilderGetNode(dockspaceId) == nullptr) {
         // First run (no saved layout for this dockspace yet): lay out Hierarchy left (~20%),
-        // Inspector right (~25%), everything else left as the implicit central node (the scene).
+        // Inspector right (~25%), and dock "Scene" into the remaining central node (the scene).
         ImGui::DockBuilderRemoveNode(dockspaceId);
         ImGui::DockBuilderAddNode(dockspaceId, (ImGuiDockNodeFlags)((int)ImGuiDockNodeFlags_DockSpace | (int)ImGuiDockNodeFlags_PassthruCentralNode));
         ImGui::DockBuilderSetNodeSize(dockspaceId, ImVec2((float)winW, (float)winH));
 
-        ImGuiID centerId = dockspaceId;
+        centerId = dockspaceId;
         ImGuiID leftId = ImGui::DockBuilderSplitNode(centerId, ImGuiDir_Left, 0.20f, nullptr, &centerId);
         // centerId is now the remaining 80%; split off 0.3125 of THAT so the right panel is
         // 25% of the *total* width (0.3125 * 0.80 == 0.25), leaving a true 55% central node.
@@ -70,36 +70,57 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
 
     ImGui::DockSpaceOverViewport(dockspaceId, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
 
-    // Central dock node's live on-screen Pos/Size *is* the scene viewport. Queried fresh every
-    // frame (not just on first-run) so it tracks drags/resizes/re-docks as the user does them.
+    // "Scene" is a window added after Hierarchy/Inspector already existed in this task's history, so an
+    // existing imgui.ini saved by an older build (dockspace/Hierarchy/Inspector already laid out, no
+    // "Scene" entry at all) must still land Scene in the central node on upgrade, not as a stray floating
+    // window. Only force its initial dock assignment if it has genuinely never been seen before in any
+    // session (no saved settings for it at all) -- otherwise respect wherever the user last dragged it,
+    // the same way Hierarchy/Inspector are never re-forced after their first run.
     //
-    // BUG FIX: on the exact frame the first-run layout above is built, ImGui has not yet run the
-    // internal pass that resolves the central node's actual Pos/Size -- DockBuilderGetCentralNode()
-    // still reports the FULL dockspace rect (stale) for this one frame, even though the left/right
-    // splits are already correctly sized. Confirmed by direct instrumentation: logging every node's
-    // Pos/Size showed the central node at (0,0,winW,winH) on frame 0 (first-run) and only resolving
-    // to the correct sub-region from frame 1 onward. If that first frame is visible for any
-    // perceptible duration (e.g. first-frame GPU/shader warm-up stalls on a freshly launched OpenGL
-    // app), the GizmoToolbar/Tips overlays and the rendered scene itself briefly use this stale
-    // full-window rect, which looks exactly like a malformed layout (everything pinned to the
-    // top-left corner, overlapping Hierarchy) even though the dock structure itself is correct.
-    // Fix: on that one frame only, compute the viewport directly from the known split ratios
-    // instead of trusting the not-yet-settled dock node query.
-    ViewportRect viewport;
-    if (wasFirstRun) {
-        float leftW = (float)winW * 0.20f;
-        float rightW = (float)winW * 0.25f;
-        viewport = ViewportRect{leftW, 0.0f, (float)winW - leftW - rightW, (float)winH};
-    } else {
-        ImGuiDockNode* centralNode = ImGui::DockBuilderGetCentralNode(dockspaceId);
-        if (centralNode) {
-            viewport = ViewportRect{centralNode->Pos.x, centralNode->Pos.y, centralNode->Size.x, centralNode->Size.y};
-        } else {
-            // Shouldn't happen given the layout above always keeps an implicit central node, but
-            // fall back to the full window rather than an uninitialized/garbage viewport.
-            viewport = ViewportRect{0.0f, 0.0f, (float)winW, (float)winH};
+    // This check (and the DockBuilderGetCentralNode() fallback it uses to find the central node's
+    // *identity*, as opposed to its Pos/Size, which is what's actually unreliable -- see below) must
+    // run AFTER DockSpaceOverViewport() above, not before: when the dockspace tree was loaded from an
+    // existing imgui.ini rather than just built fresh this frame via DockBuilder* calls, the root's
+    // cached CentralNode pointer isn't populated until DockSpaceOverViewport()'s internal DockSpace()
+    // call has run its per-frame update pass at least once. Querying it before that point (confirmed by
+    // reproducing this exact upgrade scenario: an existing ini with Hierarchy/Inspector but no Scene
+    // entry) returned null, which made the old code fall back to the dockspace ROOT id -- docking
+    // "Scene" into a non-leaf split node, which silently failed and left it as a tiny stray floating
+    // window instead of filling the central region.
+    if (ImGui::FindWindowSettingsByID(ImHashStr("Scene")) == nullptr) {
+        if (centerId == 0) {
+            ImGuiDockNode* central = ImGui::DockBuilderGetCentralNode(dockspaceId);
+            centerId = central ? central->ID : dockspaceId;
         }
+        ImGui::DockBuilderDockWindow("Scene", centerId);
     }
+
+    // The scene's ViewportRect comes from a REAL docked ImGui window ("Scene"), not from peeking at
+    // DockBuilder's internal node bookkeeping. An earlier approach read the central dock node's
+    // Pos/Size directly via DockBuilderGetCentralNode(), but that node never has any window bound to
+    // it (it's just an empty passthrough placeholder) -- its Pos/Size are only correct once BOTH of
+    // its siblings (Hierarchy/Inspector) have been marked IsVisible for the frame, which only happens
+    // after their own Begin() calls run later in this same frame. Confirmed by direct instrumentation
+    // (logging every dock node's Pos/Size/IsVisible/Windows.Size across frames, with and without a
+    // pre-existing imgui.ini): on frame 0 of *every* launch where Hierarchy/Inspector haven't bound to
+    // their nodes yet this frame -- which includes every ordinary relaunch once imgui.ini already
+    // exists from a prior session, not just a true first-ever run -- the central node reports the
+    // FULL dockspace rect (e.g. (0,0,1280,720) instead of the correct (257,0,701,720)), and nothing
+    // after that point corrects it for that frame. That's a deterministic, every-launch bug, not a
+    // rare timing fluke.
+    //
+    // A real ImGui window's geometry does not have this hazard: Begin()/BeginDocked() synchronously
+    // resolves the window's final position and size for the current frame no matter what, so reading
+    // it immediately after Begin("Scene", ...) is always correct, on every frame including frame 0.
+    ViewportRect viewport;
+    ImGuiWindowFlags sceneFlags = ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar |
+                                  ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoCollapse |
+                                  ImGuiWindowFlags_NoMouseInputs; // let clicks/hover pass through to our own picking/gizmo logic below
+    ImGui::Begin("Scene", nullptr, sceneFlags);
+    ImVec2 sceneOrigin = ImGui::GetCursorScreenPos();
+    ImVec2 sceneSize = ImGui::GetContentRegionAvail();
+    viewport = ViewportRect{sceneOrigin.x, sceneOrigin.y, sceneSize.x, sceneSize.y};
+    ImGui::End();
 
     int mx, my;
     SDL_GetMouseState(&mx, &my);
