@@ -6,6 +6,46 @@
 #include <filesystem>
 #include <cstring>
 
+// Builds the default dockspace layout (Hierarchy left ~20%, Inspector right ~25%, central node for
+// "Scene") from scratch. Assumes dockspaceId has no existing node (or that the caller just removed
+// one), same precondition the original first-run-only block had. Factored out so it can be called
+// both on first run (no saved layout yet) and from View > Reset Layout (rebuild on demand, same
+// frame) without duplicating the DockBuilder* sequence.
+static ImGuiID BuildDefaultDockLayout(ImGuiID dockspaceId, int winW, int winH) {
+    ImGui::DockBuilderAddNode(dockspaceId, (ImGuiDockNodeFlags)((int)ImGuiDockNodeFlags_DockSpace | (int)ImGuiDockNodeFlags_PassthruCentralNode));
+    ImGui::DockBuilderSetNodeSize(dockspaceId, ImVec2((float)winW, (float)winH));
+
+    ImGuiID centerId = dockspaceId;
+    ImGuiID leftId = ImGui::DockBuilderSplitNode(centerId, ImGuiDir_Left, 0.20f, nullptr, &centerId);
+    // centerId is now the remaining 80%; split off 0.3125 of THAT so the right panel is
+    // 25% of the *total* width (0.3125 * 0.80 == 0.25), leaving a true 55% central node.
+    ImGuiID rightId = ImGui::DockBuilderSplitNode(centerId, ImGuiDir_Right, 0.3125f, nullptr, &centerId);
+
+    ImGui::DockBuilderDockWindow("Hierarchy", leftId);
+    ImGui::DockBuilderDockWindow("Inspector", rightId);
+    // Explicitly (re-)dock "Scene" into the central node too, not just Hierarchy/Inspector. On a true
+    // first-ever run this is redundant with (and harmless alongside) the FindWindowSettingsByID-gated
+    // fallback below Draw()'s DockSpaceOverViewport() call, which only fires when Scene has never been
+    // seen before. But View > Reset Layout calls this function again later in an already-running
+    // session, after Scene already has saved window settings -- without this line, removing the dock
+    // node tree (DockBuilderRemoveNode) would leave Scene's dock assignment severed and it would NOT
+    // get re-homed into the newly rebuilt central node (that fallback's gate would skip it, since
+    // Scene's settings already exist), defeating "Reset Layout" for exactly the window that matters
+    // most. Docking it here makes the reset unconditional, matching the brief's "regardless of
+    // whatever's currently saved."
+    ImGui::DockBuilderDockWindow("Scene", centerId);
+    ImGui::DockBuilderFinish(dockspaceId);
+    return centerId;
+}
+
+// Shared by the Hierarchy panel's "+ New Entity" button and the File menu's "+ New Entity" item,
+// so the two can't drift apart over time.
+static void SpawnNewEntity(std::vector<Entity>& entities, const Camera& cam,
+                            std::vector<std::vector<Entity>>& undoStack) {
+    undoStack.push_back(entities); // Save before adding
+    entities.push_back({"Prop", cam.x, cam.y, 0, 0.3f, 0.3f, {1,1,1}, "default", true, false, 0});
+}
+
 EditorUI::EditorUI() {}
 
 EditorUI::~EditorUI() {
@@ -54,18 +94,52 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
         // First run (no saved layout for this dockspace yet): lay out Hierarchy left (~20%),
         // Inspector right (~25%), and dock "Scene" into the remaining central node (the scene).
         ImGui::DockBuilderRemoveNode(dockspaceId);
-        ImGui::DockBuilderAddNode(dockspaceId, (ImGuiDockNodeFlags)((int)ImGuiDockNodeFlags_DockSpace | (int)ImGuiDockNodeFlags_PassthruCentralNode));
-        ImGui::DockBuilderSetNodeSize(dockspaceId, ImVec2((float)winW, (float)winH));
+        centerId = BuildDefaultDockLayout(dockspaceId, winW, winH);
+    }
 
-        centerId = dockspaceId;
-        ImGuiID leftId = ImGui::DockBuilderSplitNode(centerId, ImGuiDir_Left, 0.20f, nullptr, &centerId);
-        // centerId is now the remaining 80%; split off 0.3125 of THAT so the right panel is
-        // 25% of the *total* width (0.3125 * 0.80 == 0.25), leaving a true 55% central node.
-        ImGuiID rightId = ImGui::DockBuilderSplitNode(centerId, ImGuiDir_Right, 0.3125f, nullptr, &centerId);
-
-        ImGui::DockBuilderDockWindow("Hierarchy", leftId);
-        ImGui::DockBuilderDockWindow("Inspector", rightId);
-        ImGui::DockBuilderFinish(dockspaceId);
+    // --- Main menu bar ---
+    // MUST run (Begin/EndMainMenuBar) before DockSpaceOverViewport() below, in this same frame.
+    // DockSpaceOverViewport(dockspaceId, nullptr, ...) reads the main viewport's WorkPos/WorkSize to
+    // size the dockspace; that work rect is only shrunk to account for the main menu bar's reserved
+    // height once BeginMainMenuBar()/EndMainMenuBar() has run for the frame. Call it after that point
+    // instead and the dockspace (and everything docked into it) will overlap the menu bar for a frame
+    // of lag (or permanently, depending on how ImGui caches it) -- this is the same class of
+    // one-frame-stale-geometry bug documented above for DockBuilderGetCentralNode(), so don't move
+    // this block below DockSpaceOverViewport() to "simplify" the flow.
+    if (ImGui::BeginMainMenuBar()) {
+        if (ImGui::BeginMenu("File")) {
+            if (ImGui::MenuItem("+ New Entity")) {
+                SpawnNewEntity(entities, cam, undoStack);
+            }
+            if (ImGui::MenuItem("Save")) {
+                saveRequested = true;
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Edit")) {
+            if (ImGui::MenuItem("Undo", nullptr, false, !undoStack.empty())) {
+                // Replicates Engine::Undo()'s exact 3-line logic inline: Draw() already has
+                // entities/undoStack by reference, and Engine::Undo() isn't reachable from here
+                // (separate class) -- exposing it across that boundary would be more invasive than
+                // this small duplication is worth.
+                if (!undoStack.empty()) {
+                    entities = undoStack.back();
+                    undoStack.pop_back();
+                }
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("View")) {
+            if (ImGui::MenuItem("Reset Layout")) {
+                // Rebuild the default split immediately, in this running session -- not just on next
+                // launch. DockBuilderRemoveNode() first because BuildDefaultDockLayout() assumes a
+                // fresh/removed node going in, same precondition the first-run path above relies on.
+                ImGui::DockBuilderRemoveNode(dockspaceId);
+                centerId = BuildDefaultDockLayout(dockspaceId, winW, winH);
+            }
+            ImGui::EndMenu();
+        }
+        ImGui::EndMainMenuBar();
     }
 
     // WindowBg is pushed fully transparent for the DockSpaceOverViewport() call ONLY. Reason: with
@@ -216,8 +290,7 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
             selected = i;
     }
     if (ImGui::Button("+ New Entity", ImVec2(-1, 30))) {
-        undoStack.push_back(entities); // Save before adding
-        entities.push_back({"Prop", cam.x, cam.y, 0, 0.3f, 0.3f, {1,1,1}, "default", true, false, 0});
+        SpawnNewEntity(entities, cam, undoStack);
     }
     ImGui::End();
 
