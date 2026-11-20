@@ -112,11 +112,33 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
     // A real ImGui window's geometry does not have this hazard: Begin()/BeginDocked() synchronously
     // resolves the window's final position and size for the current frame no matter what, so reading
     // it immediately after Begin("Scene", ...) is always correct, on every frame including frame 0.
+    //
+    // NOTE: Scene does NOT have ImGuiWindowFlags_NoMouseInputs (an earlier draft did, and that silently
+    // broke scene click-to-select/gizmo-grab -- see sceneHovered below for why and how that's handled).
+    // Scene also cannot be undocked (ImGuiDockNodeFlags_NoUndocking via SetNextWindowClass): since
+    // ViewportRect is always just "Scene's own window rect" now, letting it float free would shrink the
+    // rendered game world into an arbitrary floating window instead of the dockspace's central region --
+    // confusing, not merely cosmetic -- so undocking it is disabled outright rather than letting a user
+    // get into that state.
+    ImGuiWindowClass sceneWindowClass;
+    sceneWindowClass.DockNodeFlagsOverrideSet = ImGuiDockNodeFlags_NoUndocking;
+    ImGui::SetNextWindowClass(&sceneWindowClass);
+
     ViewportRect viewport;
     ImGuiWindowFlags sceneFlags = ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar |
-                                  ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoCollapse |
-                                  ImGuiWindowFlags_NoMouseInputs; // let clicks/hover pass through to our own picking/gizmo logic below
+                                  ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoCollapse;
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f)); // scene should fill edge-to-edge, no default window padding inset
     ImGui::Begin("Scene", nullptr, sceneFlags);
+    ImGui::PopStyleVar();
+    // Mouse inputs are intentionally left enabled on this window (no NoMouseInputs) so ImGui's own
+    // hover/z-order resolution correctly yields the scene when nothing else (Hierarchy/Inspector/
+    // GizmoToolbar/Tips) is on top of it at the cursor. Scene being a real hoverable window means
+    // io.WantCaptureMouse is true whenever the mouse is anywhere over it too (that's just "some ImGui
+    // window is hovered"), so it can no longer be used to gate scene-only clicks -- sceneHovered
+    // (true only while the mouse is specifically over *this* window, not Hierarchy/Inspector/the
+    // GizmoToolbar overlay drawn on top of it later this same frame) is the precise replacement, used
+    // below for both the gizmo click-start gate and the entity-picking click gate.
+    bool sceneHovered = ImGui::IsWindowHovered();
     ImVec2 sceneOrigin = ImGui::GetCursorScreenPos();
     ImVec2 sceneSize = ImGui::GetContentRegionAvail();
     viewport = ViewportRect{sceneOrigin.x, sceneOrigin.y, sceneSize.x, sceneSize.y};
@@ -131,7 +153,7 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
         gizmo.Draw(ImGui::GetForegroundDrawList(), entities[selected], cam, viewport);
         gizmoActive = gizmo.Update(entities[selected], cam, viewport,
                                     ImGui::IsMouseDown(ImGuiMouseButton_Left),
-                                    ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::GetIO().WantCaptureMouse,
+                                    ImGui::IsMouseClicked(ImGuiMouseButton_Left) && sceneHovered,
                                     ImGui::IsMouseReleased(ImGuiMouseButton_Left),
                                     (float)mx, (float)my);
     }
@@ -152,7 +174,7 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
     }
 
     // --- Input / Picking ---
-    if (!gizmoActive && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::GetIO().WantCaptureMouse) {
+    if (!gizmoActive && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && sceneHovered) {
         float localMx = mx - viewport.x;
         float localMy = my - viewport.y;
         if (localMx >= 0 && localMx <= viewport.width && localMy >= 0 && localMy <= viewport.height) {
