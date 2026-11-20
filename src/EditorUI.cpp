@@ -6,6 +6,15 @@
 #include <filesystem>
 #include <cstring>
 
+// Single named accent color for the whole editor theme: a deliberate, unambiguous red (not
+// orange, not a desaturated purple/magenta) used for every "this is active/on/selected"
+// highlight -- checkboxes, the Gizmo toolbar's active-mode button, slider grabs, and dock tabs.
+// kAccentColorDark is the same hue at reduced lightness/saturation, used for the handful of
+// spots (SliderGrabActive, tab-active states) that previously used a correspondingly darker
+// shade of the old orange -- same light/dark relationship, just re-hued to red.
+static const ImVec4 kAccentColor     = ImVec4(0.82f, 0.18f, 0.16f, 1.00f);
+static const ImVec4 kAccentColorDark = ImVec4(0.74f, 0.16f, 0.14f, 1.00f);
+
 // Builds the default dockspace layout (Hierarchy left ~20%, Inspector right ~25%, central node for
 // "Scene") from scratch. Assumes dockspaceId has no existing node (or that the caller just removed
 // one), same precondition the original first-run-only block had. Factored out so it can be called
@@ -352,21 +361,21 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
         ImGui::Begin("GizmoToolbar", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove);
 
         bool isMove = (gizmo.mode == GizmoMode::Move);
-        if (isMove) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.94f, 0.50f, 0.09f, 1.00f));
+        if (isMove) ImGui::PushStyleColor(ImGuiCol_Button, kAccentColor);
         if (ImGui::Button("Move")) gizmo.mode = GizmoMode::Move;
         if (isMove) ImGui::PopStyleColor();
 
         ImGui::SameLine();
 
         bool isRotate = (gizmo.mode == GizmoMode::Rotate);
-        if (isRotate) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.94f, 0.50f, 0.09f, 1.00f));
+        if (isRotate) ImGui::PushStyleColor(ImGuiCol_Button, kAccentColor);
         if (ImGui::Button("Rotate")) gizmo.mode = GizmoMode::Rotate;
         if (isRotate) ImGui::PopStyleColor();
 
         ImGui::SameLine();
 
         bool isScale = (gizmo.mode == GizmoMode::Scale);
-        if (isScale) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.94f, 0.50f, 0.09f, 1.00f));
+        if (isScale) ImGui::PushStyleColor(ImGuiCol_Button, kAccentColor);
         if (ImGui::Button("Scale")) gizmo.mode = GizmoMode::Scale;
         if (isScale) ImGui::PopStyleColor();
 
@@ -416,9 +425,9 @@ void EditorUI::SetupUIStyle() {
     colors[ImGuiCol_ScrollbarGrab]          = ImVec4(0.31f, 0.31f, 0.31f, 1.00f);
     colors[ImGuiCol_ScrollbarGrabHovered]   = ImVec4(0.41f, 0.41f, 0.41f, 1.00f);
     colors[ImGuiCol_ScrollbarGrabActive]    = ImVec4(0.51f, 0.51f, 0.51f, 1.00f);
-    colors[ImGuiCol_CheckMark]              = ImVec4(0.94f, 0.50f, 0.09f, 1.00f);
+    colors[ImGuiCol_CheckMark]              = kAccentColor;
     colors[ImGuiCol_SliderGrab]             = ImVec4(0.51f, 0.51f, 0.51f, 1.00f);
-    colors[ImGuiCol_SliderGrabActive]       = ImVec4(0.86f, 0.45f, 0.07f, 1.00f);
+    colors[ImGuiCol_SliderGrabActive]       = kAccentColorDark;
     colors[ImGuiCol_Button]                 = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
     colors[ImGuiCol_ButtonHovered]          = ImVec4(0.35f, 0.35f, 0.35f, 1.00f);
     colors[ImGuiCol_ButtonActive]           = ImVec4(0.15f, 0.15f, 0.15f, 1.00f);
@@ -431,11 +440,14 @@ void EditorUI::SetupUIStyle() {
     colors[ImGuiCol_ResizeGrip]             = ImVec4(0.91f, 0.91f, 0.91f, 0.25f);
     colors[ImGuiCol_ResizeGripHovered]      = ImVec4(0.81f, 0.81f, 0.81f, 0.67f);
     colors[ImGuiCol_ResizeGripActive]       = ImVec4(0.46f, 0.46f, 0.46f, 0.95f);
-    colors[ImGuiCol_Tab]                    = ImVec4(0.18f, 0.35f, 0.58f, 0.86f);
-    colors[ImGuiCol_TabHovered]             = ImVec4(0.26f, 0.59f, 0.98f, 0.80f);
-    colors[ImGuiCol_TabActive]              = ImVec4(0.20f, 0.41f, 0.68f, 1.00f);
-    colors[ImGuiCol_TabUnfocused]           = ImVec4(0.07f, 0.10f, 0.15f, 0.97f);
-    colors[ImGuiCol_TabUnfocusedActive]     = ImVec4(0.14f, 0.26f, 0.42f, 1.00f);
+    // Dock tabs: dark, slightly red-tinted when inactive, rising to the full red accent on
+    // hover/active -- replaces Dear ImGui's default blue-ish tab palette (now an everyday sight
+    // since Tasks 3-4 make dragging panels into tab groups a normal interaction).
+    colors[ImGuiCol_Tab]                    = ImVec4(0.20f, 0.10f, 0.10f, 0.86f);
+    colors[ImGuiCol_TabHovered]             = ImVec4(kAccentColor.x, kAccentColor.y, kAccentColor.z, 0.80f);
+    colors[ImGuiCol_TabActive]              = ImVec4(0.45f, 0.14f, 0.13f, 1.00f);
+    colors[ImGuiCol_TabUnfocused]           = ImVec4(0.10f, 0.06f, 0.06f, 0.97f);
+    colors[ImGuiCol_TabUnfocusedActive]     = ImVec4(0.30f, 0.11f, 0.10f, 1.00f);
     colors[ImGuiCol_PlotLines]              = ImVec4(0.61f, 0.61f, 0.61f, 1.00f);
     colors[ImGuiCol_PlotLinesHovered]       = ImVec4(1.00f, 0.43f, 0.35f, 1.00f);
     colors[ImGuiCol_PlotHistogram]          = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
