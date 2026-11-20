@@ -49,7 +49,8 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
     // every frame and can be used both to query DockBuilder state and to feed DockSpaceOverViewport().
     ImGuiID dockspaceId = ImHashStr("WaryEditorDockSpace");
 
-    if (ImGui::DockBuilderGetNode(dockspaceId) == nullptr) {
+    bool wasFirstRun = (ImGui::DockBuilderGetNode(dockspaceId) == nullptr);
+    if (wasFirstRun) {
         // First run (no saved layout for this dockspace yet): lay out Hierarchy left (~20%),
         // Inspector right (~25%), everything else left as the implicit central node (the scene).
         ImGui::DockBuilderRemoveNode(dockspaceId);
@@ -71,14 +72,33 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
 
     // Central dock node's live on-screen Pos/Size *is* the scene viewport. Queried fresh every
     // frame (not just on first-run) so it tracks drags/resizes/re-docks as the user does them.
-    ImGuiDockNode* centralNode = ImGui::DockBuilderGetCentralNode(dockspaceId);
+    //
+    // BUG FIX: on the exact frame the first-run layout above is built, ImGui has not yet run the
+    // internal pass that resolves the central node's actual Pos/Size -- DockBuilderGetCentralNode()
+    // still reports the FULL dockspace rect (stale) for this one frame, even though the left/right
+    // splits are already correctly sized. Confirmed by direct instrumentation: logging every node's
+    // Pos/Size showed the central node at (0,0,winW,winH) on frame 0 (first-run) and only resolving
+    // to the correct sub-region from frame 1 onward. If that first frame is visible for any
+    // perceptible duration (e.g. first-frame GPU/shader warm-up stalls on a freshly launched OpenGL
+    // app), the GizmoToolbar/Tips overlays and the rendered scene itself briefly use this stale
+    // full-window rect, which looks exactly like a malformed layout (everything pinned to the
+    // top-left corner, overlapping Hierarchy) even though the dock structure itself is correct.
+    // Fix: on that one frame only, compute the viewport directly from the known split ratios
+    // instead of trusting the not-yet-settled dock node query.
     ViewportRect viewport;
-    if (centralNode) {
-        viewport = ViewportRect{centralNode->Pos.x, centralNode->Pos.y, centralNode->Size.x, centralNode->Size.y};
+    if (wasFirstRun) {
+        float leftW = (float)winW * 0.20f;
+        float rightW = (float)winW * 0.25f;
+        viewport = ViewportRect{leftW, 0.0f, (float)winW - leftW - rightW, (float)winH};
     } else {
-        // Shouldn't happen given the layout above always keeps an implicit central node, but
-        // fall back to the full window rather than an uninitialized/garbage viewport.
-        viewport = ViewportRect{0.0f, 0.0f, (float)winW, (float)winH};
+        ImGuiDockNode* centralNode = ImGui::DockBuilderGetCentralNode(dockspaceId);
+        if (centralNode) {
+            viewport = ViewportRect{centralNode->Pos.x, centralNode->Pos.y, centralNode->Size.x, centralNode->Size.y};
+        } else {
+            // Shouldn't happen given the layout above always keeps an implicit central node, but
+            // fall back to the full window rather than an uninitialized/garbage viewport.
+            viewport = ViewportRect{0.0f, 0.0f, (float)winW, (float)winH};
+        }
     }
 
     int mx, my;
