@@ -260,7 +260,7 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
     // confusing, not merely cosmetic -- so undocking it is disabled outright rather than letting a user
     // get into that state.
     ImGuiWindowClass sceneWindowClass;
-    sceneWindowClass.DockNodeFlagsOverrideSet = ImGuiDockNodeFlags_NoUndocking;
+    sceneWindowClass.DockNodeFlagsOverrideSet = (ImGuiDockNodeFlags)((int)ImGuiDockNodeFlags_NoUndocking | (int)ImGuiDockNodeFlags_NoDockingOverMe);
     ImGui::SetNextWindowClass(&sceneWindowClass);
 
     ViewportRect viewport;
@@ -410,7 +410,7 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, kToolbarFrameRounding);
         ImGui::PushStyleColor(ImGuiCol_WindowBg, kToolbarGlassBg);
         ImGui::SetNextWindowPos(ImVec2(viewport.x + 10, viewport.y + 10));
-        ImGui::Begin("GizmoToolbar", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove);
+        ImGui::Begin("GizmoToolbar", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDocking);
         DrawGlassSheen();
 
         bool isMove = (gizmo.mode == GizmoMode::Move);
@@ -439,7 +439,7 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
 
     // Tips
     ImGui::SetNextWindowPos(ImVec2(viewport.x + 10, viewport.y + viewport.height - 60));
-    ImGui::Begin("Tips", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoBackground);
+    ImGui::Begin("Tips", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDocking);
     ImGui::TextColored(ImVec4(1,1,1,0.5f), "WASD-Move | Space-Particle | Middle-Pan | Scroll-Zoom");
     ImGui::End();
 
@@ -527,6 +527,9 @@ void EditorUI::SetupUIStyle() {
     colors[ImGuiCol_TabActive]              = ImVec4(0.45f, 0.14f, 0.13f, 1.00f);
     colors[ImGuiCol_TabUnfocused]           = ImVec4(0.10f, 0.06f, 0.06f, 0.97f);
     colors[ImGuiCol_TabUnfocusedActive]     = ImVec4(0.30f, 0.11f, 0.10f, 1.00f);
+    colors[ImGuiCol_TabSelectedOverline]    = kAccentColor;
+    colors[ImGuiCol_TabDimmedSelectedOverline] = ImVec4(kAccentColor.x, kAccentColor.y, kAccentColor.z, 0.60f);
+    colors[ImGuiCol_DockingPreview]         = ImVec4(kAccentColor.x, kAccentColor.y, kAccentColor.z, 0.60f);
     colors[ImGuiCol_PlotLines]              = ImVec4(0.61f, 0.61f, 0.61f, 1.00f);
     colors[ImGuiCol_PlotLinesHovered]       = ImVec4(1.00f, 0.43f, 0.35f, 1.00f);
     colors[ImGuiCol_PlotHistogram]          = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
