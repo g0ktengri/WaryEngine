@@ -55,6 +55,31 @@ static void SpawnNewEntity(std::vector<Entity>& entities, const Camera& cam,
     entities.push_back({"Prop", cam.x, cam.y, 0, 0.3f, 0.3f, {1,1,1}, "default", true, false, 0});
 }
 
+// Draws the "glass" theme's one deliberately-allowed gradient: a faint light sheen across the top
+// edge of a chrome panel (Hierarchy/Inspector/GizmoToolbar), simulating light catching the top of
+// a glass surface. Fades from a low-alpha white at the panel's top edge to fully transparent by
+// heightFraction down the panel. Must be called right after Begin() (and before any other widget
+// calls) so it lands behind the panel's own content in the window's draw list, not on top of it.
+// Shared by all three call sites instead of repeating the AddRectFilledMultiColor call with
+// drift risk between them.
+//
+// The quad is inset by the window's own rounding on the left/right (and half that on top) so its
+// flat corners stay within the window's straight edge instead of visibly squaring off past the
+// already-rounded corner the window background itself draws.
+static void DrawGlassSheen(float heightFraction = 0.28f, float topAlpha = 0.10f) {
+    ImGuiStyle& style = ImGui::GetStyle();
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    ImVec2 winPos = ImGui::GetWindowPos();
+    ImVec2 winSize = ImGui::GetWindowSize();
+    float inset = style.WindowRounding;
+
+    ImVec2 topLeft(winPos.x + inset, winPos.y + inset * 0.5f);
+    ImVec2 bottomRight(winPos.x + winSize.x - inset, winPos.y + winSize.y * heightFraction);
+    ImU32 sheenColor = ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, topAlpha));
+    ImU32 fadeColor  = ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, 0.0f));
+    drawList->AddRectFilledMultiColor(topLeft, bottomRight, sheenColor, sheenColor, fadeColor, fadeColor);
+}
+
 EditorUI::EditorUI() {}
 
 EditorUI::~EditorUI() {
@@ -291,6 +316,7 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
     // --- UI Draw ---
     // Hierarchy
     ImGui::Begin("Hierarchy", nullptr, ImGuiWindowFlags_NoCollapse);
+    DrawGlassSheen();
     if (ImGui::Button("Save", ImVec2(-1, 0))) { saveRequested = true; }
     ImGui::TextDisabled("Entities");
     ImGui::Separator();
@@ -305,6 +331,7 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
 
     // Inspector
     ImGui::Begin("Inspector", nullptr, ImGuiWindowFlags_NoCollapse);
+    DrawGlassSheen();
     if (selected >= 0 && selected < (int)entities.size()) {
         Entity &e = entities[selected];
         ImGui::Text("Properties");
@@ -359,6 +386,7 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
     if (selected >= 0 && selected < (int)entities.size()) {
         ImGui::SetNextWindowPos(ImVec2(viewport.x + 10, viewport.y + 10));
         ImGui::Begin("GizmoToolbar", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove);
+        DrawGlassSheen();
 
         bool isMove = (gizmo.mode == GizmoMode::Move);
         if (isMove) ImGui::PushStyleColor(ImGuiCol_Button, kAccentColor);
@@ -395,24 +423,33 @@ void EditorUI::SetupUIStyle() {
     ImGuiStyle& style = ImGui::GetStyle();
     ImVec4* colors = style.Colors;
 
-    style.WindowRounding = 6.0f;
-    style.FrameRounding = 4.0f;
-    style.PopupRounding = 4.0f;
-    style.ScrollbarRounding = 4.0f;
-    style.GrabRounding = 4.0f;
-    style.TabRounding = 4.0f;
+    // Softer, more generous rounding across the board -- "Apple-app soft" rather than the
+    // previous token rounding -- consistent with the glass/translucent chrome treatment below.
+    style.WindowRounding = 12.0f;
+    style.FrameRounding = 8.0f;
+    style.PopupRounding = 10.0f;
+    style.ScrollbarRounding = 8.0f;
+    style.GrabRounding = 8.0f;
+    style.TabRounding = 10.0f;
 
     style.WindowPadding = ImVec2(10, 10);
     style.FramePadding = ImVec2(6, 4);
     style.ItemSpacing = ImVec2(8, 6);
     style.ScrollbarSize = 12.0f;
 
+    // Explicit (rather than relying on Dear ImGui's own default) so the glass-edge Border color
+    // below is guaranteed to actually render, not just be set.
+    style.WindowBorderSize = 1.0f;
+
     colors[ImGuiCol_Text]                   = ImVec4(0.95f, 0.95f, 0.95f, 1.00f);
     colors[ImGuiCol_TextDisabled]           = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
-    colors[ImGuiCol_WindowBg]               = ImVec4(0.12f, 0.12f, 0.12f, 1.00f);
+    // Translucent "glass" panel background -- alpha reduced from fully opaque so whatever's
+    // behind a panel (desktop, or another panel's edge) subtly shows through, the core glass cue.
+    colors[ImGuiCol_WindowBg]               = ImVec4(0.12f, 0.12f, 0.12f, 0.82f);
     colors[ImGuiCol_ChildBg]                = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
     colors[ImGuiCol_PopupBg]                = ImVec4(0.08f, 0.08f, 0.08f, 0.94f);
-    colors[ImGuiCol_Border]                 = ImVec4(0.43f, 0.43f, 0.50f, 0.50f);
+    // Light, low-alpha near-white -- reads as light catching a glass edge, not the old blue-gray.
+    colors[ImGuiCol_Border]                 = ImVec4(1.00f, 1.00f, 1.00f, 0.18f);
     colors[ImGuiCol_BorderShadow]           = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
     colors[ImGuiCol_FrameBg]                = ImVec4(0.20f, 0.21f, 0.22f, 0.54f);
     colors[ImGuiCol_FrameBgHovered]         = ImVec4(0.40f, 0.40f, 0.40f, 0.40f);
@@ -420,7 +457,8 @@ void EditorUI::SetupUIStyle() {
     colors[ImGuiCol_TitleBg]                = ImVec4(0.04f, 0.04f, 0.04f, 1.00f);
     colors[ImGuiCol_TitleBgActive]          = ImVec4(0.29f, 0.29f, 0.29f, 1.00f);
     colors[ImGuiCol_TitleBgCollapsed]       = ImVec4(0.00f, 0.00f, 0.00f, 0.51f);
-    colors[ImGuiCol_MenuBarBg]              = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
+    // Same translucency treatment as the other chrome panels -- part of the same glass family.
+    colors[ImGuiCol_MenuBarBg]              = ImVec4(0.14f, 0.14f, 0.14f, 0.82f);
     colors[ImGuiCol_ScrollbarBg]            = ImVec4(0.02f, 0.02f, 0.02f, 0.53f);
     colors[ImGuiCol_ScrollbarGrab]          = ImVec4(0.31f, 0.31f, 0.31f, 1.00f);
     colors[ImGuiCol_ScrollbarGrabHovered]   = ImVec4(0.41f, 0.41f, 0.41f, 1.00f);
@@ -434,9 +472,11 @@ void EditorUI::SetupUIStyle() {
     colors[ImGuiCol_Header]                 = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
     colors[ImGuiCol_HeaderHovered]          = ImVec4(0.35f, 0.35f, 0.35f, 1.00f);
     colors[ImGuiCol_HeaderActive]           = ImVec4(0.15f, 0.15f, 0.15f, 1.00f);
-    colors[ImGuiCol_Separator]              = ImVec4(0.43f, 0.43f, 0.50f, 0.50f);
-    colors[ImGuiCol_SeparatorHovered]       = ImVec4(0.43f, 0.43f, 0.50f, 0.50f);
-    colors[ImGuiCol_SeparatorActive]        = ImVec4(0.43f, 0.43f, 0.50f, 0.50f);
+    // Matches the new Border color (same glass-edge family) instead of the old blue-gray --
+    // these previously shared that exact literal, so they stay in sync with it.
+    colors[ImGuiCol_Separator]              = ImVec4(1.00f, 1.00f, 1.00f, 0.18f);
+    colors[ImGuiCol_SeparatorHovered]       = ImVec4(1.00f, 1.00f, 1.00f, 0.18f);
+    colors[ImGuiCol_SeparatorActive]        = ImVec4(1.00f, 1.00f, 1.00f, 0.18f);
     colors[ImGuiCol_ResizeGrip]             = ImVec4(0.91f, 0.91f, 0.91f, 0.25f);
     colors[ImGuiCol_ResizeGripHovered]      = ImVec4(0.81f, 0.81f, 0.81f, 0.67f);
     colors[ImGuiCol_ResizeGripActive]       = ImVec4(0.46f, 0.46f, 0.46f, 0.95f);
