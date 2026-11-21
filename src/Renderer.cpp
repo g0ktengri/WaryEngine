@@ -6,36 +6,51 @@
 #include <filesystem>
 #include <cmath>
 #include <fstream>
+#include <algorithm>
+#include <cstddef>
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #include "Input.h"
 
 namespace fs = std::filesystem;
 
+// The project's hand-trimmed glad header omits this core GL 1.5 enum; standard value.
+#ifndef GL_DYNAMIC_DRAW
+#define GL_DYNAMIC_DRAW 0x88E8
+#endif
+
 // Shader functionality
 const char *vSrc = R"(
 #version 330 core
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec2 aTexCoord;
+layout (location = 2) in vec3 aColor;
+layout (location = 3) in float aAlpha;
 out vec2 TexCoord;
-uniform mat4 transform;
+flat out vec3 Color;
+flat out float Alpha;
 uniform mat4 view;
 void main() {
-    gl_Position = view * transform * vec4(aPos, 1.0);
+    // aPos is already world-space (sprite transform applied on the CPU when batching)
+    gl_Position = view * vec4(aPos, 1.0);
     TexCoord = aTexCoord;
+    Color = aColor;
+    Alpha = aAlpha;
 }
 )";
 
+// Color/Alpha are per-sprite constants, passed 'flat' so they reach the fragment stage
+// bit-exact (no interpolation rounding) -- same math as the old tint/alpha uniforms.
 const char *fSrc = R"(
 #version 330 core
 in vec2 TexCoord;
+flat in vec3 Color;
+flat in float Alpha;
 out vec4 FragColor;
 uniform sampler2D tex;
-uniform vec3 tint;
-uniform float alpha;
 void main() {
     vec4 c = texture(tex, TexCoord);
-    FragColor = vec4(c.rgb * tint, c.a * alpha);
+    FragColor = vec4(c.rgb * Color, c.a * Alpha);
 }
 )";
 
@@ -127,26 +142,104 @@ void Renderer::InitShader() {
     glAttachShader(shaderProgram, vs);
     glAttachShader(shaderProgram, fs);
     glLinkProgram(shaderProgram);
+    viewLoc = glGetUniformLocation(shaderProgram, "view");
 }
 
 void Renderer::InitBuffers() {
-    float v[] = {-0.5f, -0.5f, 0, 0, 0, 0.5f,  -0.5f, 0, 1, 0,
-                 0.5f,  0.5f,  0, 1, 1, -0.5f, 0.5f,  0, 0, 1};
-    unsigned int i[] = {0, 1, 2, 2, 3, 0};
-    
+    static_assert(sizeof(SpriteVertex) == 9 * sizeof(float), "SpriteVertex must be tightly packed");
+
     glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
-    glGenBuffers(1, &EBO);
+    glGenBuffers(1, &spriteVBO);
+    glGenBuffers(1, &spriteEBO);
     glBindVertexArray(VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(v), v, GL_STATIC_DRAW);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(i), i, GL_STATIC_DRAW);
-    
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), 0);
+
+    // Dynamic vertex buffer, empty until the first DrawBatch re-specifies it with a group's vertices.
+    glBindBuffer(GL_ARRAY_BUFFER, spriteVBO);
+    glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
+
+    // Index buffer starts empty; EnsureIndexCapacity fills it on demand. Bound here so it is
+    // recorded as VAO's element buffer.
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, spriteEBO);
+    spriteIndexCapacityQuads = 0;
+
+    const GLsizei stride = sizeof(SpriteVertex);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, (void *)offsetof(SpriteVertex, x));
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)(3 * sizeof(float)));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, stride, (void *)offsetof(SpriteVertex, u));
     glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, stride, (void *)offsetof(SpriteVertex, r));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, stride, (void *)offsetof(SpriteVertex, a));
+    glEnableVertexAttribArray(3);
+}
+
+void Renderer::EnsureIndexCapacity(size_t quadCount) {
+    if (quadCount <= spriteIndexCapacityQuads)
+        return;
+
+    std::vector<unsigned int> indices(quadCount * 6);
+    for (size_t q = 0; q < quadCount; q++) {
+        unsigned int base = (unsigned int)(q * 4);
+        indices[q * 6 + 0] = base + 0;
+        indices[q * 6 + 1] = base + 1;
+        indices[q * 6 + 2] = base + 2;
+        indices[q * 6 + 3] = base + 2;
+        indices[q * 6 + 4] = base + 3;
+        indices[q * 6 + 5] = base + 0;
+    }
+    // The element-array binding is VAO state: bind the sprite VAO first so this can never
+    // rebind some other VAO's (e.g. gridVAO's) element buffer.
+    glBindVertexArray(VAO);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, spriteEBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+    spriteIndexCapacityQuads = quadCount;
+}
+
+// Column-major 4x4 (CreateTransform's layout, as uploaded with glUniformMatrix4fv transpose=GL_FALSE)
+// times (lx, ly, 0, 1) -- the same result the old vertex shader's `transform * vec4(aPos, 1.0)` gave.
+// z stays 0 and w stays 1 for every matrix CreateTransform builds. Verified by the Task 4 scratchpad proof.
+void Renderer::TransformPoint(const float *m, float lx, float ly, float &ox, float &oy) {
+    ox = m[0] * lx + m[4] * ly + m[12];
+    oy = m[1] * lx + m[5] * ly + m[13];
+}
+
+// Appends one sprite's 4 world-space corners, in the old static quad's corner/UV order.
+void Renderer::AppendQuad(std::vector<SpriteVertex> &out, const float *m, const float *color, float alpha) {
+    static const float corners[4][4] = {
+        // local x, local y, u, v
+        {-0.5f, -0.5f, 0, 0},
+        { 0.5f, -0.5f, 1, 0},
+        { 0.5f,  0.5f, 1, 1},
+        {-0.5f,  0.5f, 0, 1},
+    };
+    for (const auto &c : corners) {
+        SpriteVertex sv;
+        TransformPoint(m, c[0], c[1], sv.x, sv.y);
+        sv.z = 0;
+        sv.u = c[2];
+        sv.v = c[3];
+        sv.r = color[0];
+        sv.g = color[1];
+        sv.b = color[2];
+        sv.a = alpha;
+        out.push_back(sv);
+    }
+}
+
+// Uploads one texture group's vertices and issues its single draw call. Expects the sprite
+// program + VAO bound and EnsureIndexCapacity already called for at least this group's size.
+void Renderer::DrawBatch(unsigned int textureId, const std::vector<SpriteVertex> &verts) {
+    if (verts.empty())
+        return; // zero-quad group: no upload, no draw call
+
+    // Full re-specification per group: the driver orphans the previous store instead of stalling
+    // on the previous group's in-flight draw. (The project's trimmed glad loader has no
+    // glBufferSubData, so this is also the only upload path available.)
+    glBindBuffer(GL_ARRAY_BUFFER, spriteVBO);
+    glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(SpriteVertex), verts.data(), GL_DYNAMIC_DRAW);
+
+    glBindTexture(GL_TEXTURE_2D, textureId);
+    glDrawElements(GL_TRIANGLES, (GLsizei)(verts.size() / 4 * 6), GL_UNSIGNED_INT, 0);
 }
 
 void Renderer::InitGridBuffers() {
@@ -180,6 +273,8 @@ void Renderer::InitInfiniteGrid() {
     glAttachShader(gridProgram, vs);
     glAttachShader(gridProgram, fs);
     glLinkProgram(gridProgram);
+    gridViewLoc = glGetUniformLocation(gridProgram, "view");
+    gridTransformLoc = glGetUniformLocation(gridProgram, "transform");
     glDeleteShader(vs);
     glDeleteShader(fs);
 }
@@ -257,41 +352,62 @@ void Renderer::Render(std::vector<Entity>& entities, std::vector<Particle>& part
     float vm[16];
     float aspect = viewport.width / viewport.height;
     CreateView(vm, cam, aspect);
-    glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, 0, vm);
+    glUniformMatrix4fv(viewLoc, 1, 0, vm);
 
     // Draw Infinite Grid
     glUseProgram(gridProgram);
-    glUniformMatrix4fv(glGetUniformLocation(gridProgram, "view"), 1, 0, vm);
+    glUniformMatrix4fv(gridViewLoc, 1, 0, vm);
     float gridTransform[16];
     // Scale quad to cover view. Standard quad is 1x1.
     CreateTransform(gridTransform, cam.x, cam.y, 0, 1000.0f / cam.zoom, 1000.0f / cam.zoom);
-    glUniformMatrix4fv(glGetUniformLocation(gridProgram, "transform"), 1, 0, gridTransform);
+    glUniformMatrix4fv(gridTransformLoc, 1, 0, gridTransform);
 
     glBindVertexArray(gridVAO);
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
-    // Draw Entities
-    glUseProgram(shaderProgram);
-    glBindVertexArray(VAO);
+    // --- Build sprite batches (CPU) ---
+    // Entities: grouped by resolved texture id (same resolution rule as the old per-entity loop).
+    // Within a group, entity order is preserved.
+    unsigned int defaultTid = textures["default"];
+    for (auto &kv : entityBatches)
+        kv.second.clear(); // keep capacity across frames
+    unsigned int lastEntityTid = defaultTid;
     for (auto &e : entities) {
+        auto it = textures.find(e.textureName);
+        unsigned int tid = (it != textures.end()) ? it->second : defaultTid;
         float tm[16];
         CreateTransform(tm, e.x, e.y, e.rotation, e.sx, e.sy);
-        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "transform"), 1, 0, tm);
-        glUniform3f(glGetUniformLocation(shaderProgram, "tint"), e.color[0], e.color[1], e.color[2]);
-        glUniform1f(glGetUniformLocation(shaderProgram, "alpha"), 1.0f);
-
-        unsigned int tid = textures.count(e.textureName) ? textures[e.textureName] : textures["default"];
-        glBindTexture(GL_TEXTURE_2D, tid);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        AppendQuad(entityBatches[tid], tm, e.color, 1.0f);
+        lastEntityTid = tid;
     }
 
-    // Draw Particles
+    // Particles: one group. The old particle loop never bound a texture of its own -- it drew with
+    // whatever the entity loop bound last, i.e. the last entity's texture. Reproduce that exactly
+    // (falling back to the default white texture when there are no entities).
+    batchScratch.clear();
     for (auto &p : particles) {
         float tm[16];
         CreateTransform(tm, p.x, p.y, 0, 0.04f, 0.04f);
-        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "transform"), 1, 0, tm);
-        glUniform3f(glGetUniformLocation(shaderProgram, "tint"), p.color[0], p.color[1], p.color[2]);
-        glUniform1f(glGetUniformLocation(shaderProgram, "alpha"), p.life);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        AppendQuad(batchScratch, tm, p.color, p.life);
     }
+
+    // One index-buffer growth check per frame, sized for the largest group of either pass.
+    size_t maxQuads = batchScratch.size() / 4;
+    for (auto &kv : entityBatches)
+        maxQuads = std::max(maxQuads, kv.second.size() / 4);
+    if (maxQuads > 0)
+        EnsureIndexCapacity(maxQuads);
+
+    // --- Draw: entities pass, then particles pass (same order as before batching) ---
+    glUseProgram(shaderProgram);
+    glBindVertexArray(VAO);
+    for (auto it = entityBatches.begin(); it != entityBatches.end();) {
+        if (it->second.empty()) {
+            it = entityBatches.erase(it); // texture unused this frame: no upload, no draw
+            continue;
+        }
+        DrawBatch(it->first, it->second);
+        ++it;
+    }
+    DrawBatch(lastEntityTid, batchScratch);
 }
