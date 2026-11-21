@@ -24,6 +24,8 @@ private:
     bool wasActive = false;
     std::vector<Entity> preEditState;
     Gizmo gizmo;
+    Uint32 lastFrameTicks = 0;
+    float fpsSmoothed = 0.0f;
 };
 
 #endif

@@ -133,6 +133,16 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
     ImGui_ImplSDL2_NewFrame();
     ImGui::NewFrame();
 
+    // Frame timing: wall-clock delta since the previous Draw() call, lightly smoothed so the
+    // FPS readout stays legible. dt <= 0 (first frame, or a zero-length frame) is skipped.
+    Uint32 nowTicks = SDL_GetTicks();
+    float dt = lastFrameTicks ? (nowTicks - lastFrameTicks) / 1000.0f : 0.0f;
+    lastFrameTicks = nowTicks;
+    if (dt > 0.0f) {
+        float instantFps = 1.0f / dt;
+        fpsSmoothed = (fpsSmoothed > 0.0f) ? (fpsSmoothed * 0.9f + instantFps * 0.1f) : instantFps;
+    }
+
     int winW, winH;
     SDL_GetWindowSize(window, &winW, &winH);
 
@@ -442,6 +452,14 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
     ImGui::Begin("Tips", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDocking);
     ImGui::TextColored(ImVec4(1,1,1,0.5f), "WASD-Move | Space-Particle | Middle-Pan | Scroll-Zoom");
     ImGui::End();
+
+    // FPS / frame-time overlay, top-right corner of the Scene viewport (opposite GizmoToolbar's top-left).
+    if (fpsSmoothed > 0.0f) {
+        ImGui::SetNextWindowPos(ImVec2(viewport.x + viewport.width - 10, viewport.y + 10), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+        ImGui::Begin("FPS", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoDocking);
+        ImGui::TextColored(ImVec4(1,1,1,0.7f), "FPS: %.0f (%.1fms)", fpsSmoothed, 1000.0f / fpsSmoothed);
+        ImGui::End();
+    }
 
     return viewport;
 }
