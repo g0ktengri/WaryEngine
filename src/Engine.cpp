@@ -7,7 +7,7 @@
 #include <iostream>
 #include <iomanip>
 
-Engine::Engine() : window(nullptr), running(false), selectedEntity(0) {}
+Engine::Engine() : window(nullptr), running(false) {}
 
 Engine::~Engine() {
     SDL_DestroyWindow(window);
@@ -22,8 +22,12 @@ void Engine::Init() {
     editorUI.Init(window, ctx);
 
     // Initial Entity
-    entities.push_back({"Player", 0, 0, 0, 0.4f, 0.4f, {1, 1, 1}, "default", true, false, 0});
-    
+    EntityID player = registry.Create("Player");
+    registry.transforms.Add(player, {0, 0, 0, 0.4f, 0.4f});
+    registry.sprites.Add(player, {{1, 1, 1}, "default"});
+    registry.physics.Add(player, {false, false, 0});
+    selectedEntity = player;
+
     // Attempt to load scene if exists
     LoadScene();
 }
@@ -47,10 +51,10 @@ void Engine::Run() {
 
         Update();
         bool saveRequested = false;
-        ViewportRect viewport = editorUI.Draw(window, entities, cam, selectedEntity, undoStack, saveRequested, renderer.GetTextureList());
+        ViewportRect viewport = editorUI.Draw(window, registry, cam, selectedEntity, undoStack, saveRequested, renderer.GetTextureList());
         int winW, winH;
         SDL_GetWindowSize(window, &winW, &winH);
-        renderer.Render(entities, particles, cam, viewport, winH);
+        renderer.Render(registry, particles, cam, viewport, winH);
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         SDL_GL_SwapWindow(window);
@@ -78,8 +82,8 @@ void Engine::Update() {
     }
 
     // Entity Control
-    if (selectedEntity >= 0 && selectedEntity < (int)entities.size()) {
-        Entity &e = entities[selectedEntity];
+    if (selectedEntity != EditorUI::kNoSelection) {
+        Transform& t = registry.transforms.Get(selectedEntity);
         float s = 0.02f / cam.zoom;
         float pdx = 0, pdy = 0;
 
@@ -89,57 +93,59 @@ void Engine::Update() {
         if (Input::IsKeyDown(SDL_SCANCODE_D)) pdx += s;
 
         // Try X Movement
-        e.x += pdx;
+        t.x += pdx;
         bool collX = false;
-        for (const auto &other : entities) {
-            if (&e == &other || !other.active || !other.isStatic) continue;
-            if (CheckCollision(e, other)) {
+        for (EntityID otherId : registry.Entities()) {
+            if (otherId == selectedEntity || !registry.Active(otherId) || !registry.physics.Get(otherId).isStatic) continue;
+            if (CheckCollision(t, registry.transforms.Get(otherId))) {
                 collX = true;
                 break;
             }
         }
-        if (collX) e.x -= pdx; // Revert X
+        if (collX) t.x -= pdx; // Revert X
 
         // Try Y Movement
-        e.y += pdy;
+        t.y += pdy;
         bool collY = false;
-        for (const auto &other : entities) {
-            if (&e == &other || !other.active || !other.isStatic) continue;
-            if (CheckCollision(e, other)) {
+        for (EntityID otherId : registry.Entities()) {
+            if (otherId == selectedEntity || !registry.Active(otherId) || !registry.physics.Get(otherId).isStatic) continue;
+            if (CheckCollision(t, registry.transforms.Get(otherId))) {
                 collY = true;
                 break;
             }
         }
-        if (collY) e.y -= pdy; // Revert Y
-        
+        if (collY) t.y -= pdy; // Revert Y
+
         if (Input::IsKeyDown(SDL_SCANCODE_SPACE)) {
             // Spawn Particles
              for (int k = 0; k < 2; k++)
-                particles.push_back({entities[selectedEntity].x, entities[selectedEntity].y, 
-                                     (float)(rand() % 100 - 50) / 1000, (float)(rand() % 100 - 50) / 1000, 
+                particles.push_back({registry.transforms.Get(selectedEntity).x, registry.transforms.Get(selectedEntity).y,
+                                     (float)(rand() % 100 - 50) / 1000, (float)(rand() % 100 - 50) / 1000,
                                      1.0f, {1, 0.9f, 0.1f}});
         }
     }
 
     // Physics
-    for (auto &e : entities) {
-        if (e.hasGravity && !e.isStatic) {
-            e.vy -= 0.001f;
-            e.y += e.vy;
-            
+    for (EntityID id : registry.Entities()) {
+        Physics& p = registry.physics.Get(id);
+        if (p.hasGravity && !p.isStatic) {
+            Transform& t = registry.transforms.Get(id);
+            p.vy -= 0.001f;
+            t.y += p.vy;
+
             // Ground Collision
-            for (const auto &other : entities) {
-                if (&e == &other || !other.active || !other.isStatic) continue;
-                if (CheckCollision(e, other)) {
+            for (EntityID otherId : registry.Entities()) {
+                if (otherId == id || !registry.Active(otherId) || !registry.physics.Get(otherId).isStatic) continue;
+                if (CheckCollision(t, registry.transforms.Get(otherId))) {
                     // Simple response: move back and stop
-                    e.y -= e.vy;
-                    e.vy = 0;
+                    t.y -= p.vy;
+                    p.vy = 0;
                 }
             }
 
-            if (e.y < -0.8f) { // Floor default
-                e.y = -0.8f;
-                e.vy *= -0.5f;
+            if (t.y < -0.8f) { // Floor default
+                t.y = -0.8f;
+                p.vy *= -0.5f;
             }
         }
     }
@@ -160,27 +166,35 @@ void Engine::SaveScene() {
         std::cerr << "SaveScene: could not open scene.wary for writing\n";
         return;
     }
-    for (auto &e : entities) {
-        f << std::quoted(e.name) << " " << e.x << " " << e.y << " " << e.rotation << " "
-          << e.sx << " " << e.sy << " " << e.color[0] << " " << e.color[1] << " " << e.color[2]
-          << " " << e.hasGravity << " " << e.isStatic << " " << std::quoted(e.textureName) << "\n";
+    for (EntityID id : registry.Entities()) {
+        const Transform& t = registry.transforms.Get(id);
+        const Sprite& s = registry.sprites.Get(id);
+        const Physics& p = registry.physics.Get(id);
+        f << std::quoted(registry.Name(id)) << " " << t.x << " " << t.y << " " << t.rotation << " "
+          << t.sx << " " << t.sy << " " << s.color[0] << " " << s.color[1] << " " << s.color[2]
+          << " " << p.hasGravity << " " << p.isStatic << " " << std::quoted(s.textureName) << "\n";
     }
 }
 
 void Engine::LoadScene() {
     std::ifstream f("scene.wary");
     if (!f.is_open()) return;
-    entities.clear();
+    registry.Restore({}); // empty snapshot == clear the registry
     std::string name;
     float x, y, r, sx, sy, c0, c1, c2;
     int g, st;
     std::string tName;
     while (f >> std::quoted(name) >> x >> y >> r >> sx >> sy >> c0 >> c1 >> c2 >> g >> st >> std::quoted(tName)) {
-        entities.push_back({name, x, y, r, sx, sy, {c0, c1, c2}, tName, true, (bool)g, (bool)st, 0});
+        EntityID id = registry.Create(name);
+        registry.transforms.Add(id, {x, y, r, sx, sy});
+        registry.sprites.Add(id, {{c0, c1, c2}, tName});
+        registry.physics.Add(id, {(bool)g, (bool)st, 0});
     }
+    // Every EntityID was just reassigned: a structural change clears selection (spec 1a).
+    selectedEntity = EditorUI::kNoSelection;
 }
 
-bool Engine::CheckCollision(const Entity &a, const Entity &b) {
+bool Engine::CheckCollision(const Transform &a, const Transform &b) {
     // Simple AABB
     float halfAX = a.sx / 2.0f;
     float halfAY = a.sy / 2.0f;
@@ -193,7 +207,8 @@ bool Engine::CheckCollision(const Entity &a, const Entity &b) {
 
 void Engine::Undo() {
     if (!undoStack.empty()) {
-        entities = undoStack.back();
+        registry.Restore(undoStack.back());
         undoStack.pop_back();
+        selectedEntity = EditorUI::kNoSelection;
     }
 }

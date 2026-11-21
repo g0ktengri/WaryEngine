@@ -6,7 +6,8 @@
 #include <vector>
 #include <map>
 #include <string>
-#include "Entity.h"
+#include "Entity.h"   // Particle, Camera, ViewportRect
+#include "Registry.h"
 #include "EditorUI.h"
 
 // Simple Renderer class to handle OpenGL calls
@@ -16,7 +17,7 @@ public:
     ~Renderer();
 
     void Init();
-    void Render(std::vector<Entity>& entities, std::vector<Particle>& particles, const Camera& cam, const ViewportRect& viewport, int windowHeight);
+    void Render(Registry& registry, std::vector<Particle>& particles, const Camera& cam, const ViewportRect& viewport, int windowHeight);
     void RefreshTextures();
 
     // Helpers

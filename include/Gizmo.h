@@ -2,7 +2,8 @@
 #define GIZMO_H
 
 #include "imgui.h"
-#include "Entity.h"
+#include "Entity.h"     // Camera, ViewportRect
+#include "Components.h" // Transform
 
 enum class GizmoMode { Move, Rotate, Scale };
 
@@ -15,9 +16,9 @@ class Gizmo {
 public:
     GizmoMode mode = GizmoMode::Move;
 
-    void Draw(ImDrawList* drawList, const Entity& entity, const Camera& cam, const ViewportRect& viewport);
+    void Draw(ImDrawList* drawList, const Transform& transform, const Camera& cam, const ViewportRect& viewport);
     // Returns true while a drag is in progress.
-    bool Update(Entity& entity, const Camera& cam, const ViewportRect& viewport,
+    bool Update(Transform& transform, const Camera& cam, const ViewportRect& viewport,
                 bool mouseDown, bool mouseClicked, bool mouseReleased,
                 float mouseScreenX, float mouseScreenY);
 

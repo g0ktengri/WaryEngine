@@ -44,18 +44,18 @@ namespace {
     const float kScaleMax = 10.0f;
 
     // Keeps Draw() and Update() agreeing on where the rotate ring is.
-    float ComputeRotateRingRadius(const Entity& entity, const Camera& cam, const ViewportRect& viewport,
+    float ComputeRotateRingRadius(const Transform& transform, const Camera& cam, const ViewportRect& viewport,
                                    ImVec2& outCenter) {
-        outCenter = WorldToScreen(entity.x, entity.y, cam, viewport);
-        ImVec2 corner = WorldToScreen(entity.x + entity.sx * 0.5f, entity.y + entity.sy * 0.5f, cam, viewport);
+        outCenter = WorldToScreen(transform.x, transform.y, cam, viewport);
+        ImVec2 corner = WorldToScreen(transform.x + transform.sx * 0.5f, transform.y + transform.sy * 0.5f, cam, viewport);
         float dx = corner.x - outCenter.x, dy = corner.y - outCenter.y;
         return std::sqrt(dx * dx + dy * dy) + kRotateRingPadding;
     }
 
     // Keeps Draw() and Update() agreeing on where the handles are.
-    void ComputeHandlePositions(const Entity& entity, const Camera& cam, const ViewportRect& viewport,
+    void ComputeHandlePositions(const Transform& transform, const Camera& cam, const ViewportRect& viewport,
                                  ImVec2& outCenter, ImVec2& outXTip, ImVec2& outYTip) {
-        outCenter = WorldToScreen(entity.x, entity.y, cam, viewport);
+        outCenter = WorldToScreen(transform.x, transform.y, cam, viewport);
         outXTip = ImVec2(outCenter.x + kArrowLength, outCenter.y);
         outYTip = ImVec2(outCenter.x, outCenter.y - kArrowLength);
     }
@@ -77,27 +77,27 @@ namespace {
     // Keeps Draw() and Update() agreeing on where Scale's 8 handles are.
     // Order: TL, TR, BL, BR, TopMid, BottomMid, LeftMid, RightMid — matching
     // activeHandle ids 10-17 (10+index into this array).
-    void ComputeScaleHandlePositions(const Entity& entity, const Camera& cam, const ViewportRect& viewport,
+    void ComputeScaleHandlePositions(const Transform& transform, const Camera& cam, const ViewportRect& viewport,
                                       ImVec2 outHandles[8]) {
-        float hx = entity.sx * 0.5f;
-        float hy = entity.sy * 0.5f;
-        outHandles[0] = WorldToScreen(entity.x - hx, entity.y + hy, cam, viewport); // TL corner
-        outHandles[1] = WorldToScreen(entity.x + hx, entity.y + hy, cam, viewport); // TR corner
-        outHandles[2] = WorldToScreen(entity.x - hx, entity.y - hy, cam, viewport); // BL corner
-        outHandles[3] = WorldToScreen(entity.x + hx, entity.y - hy, cam, viewport); // BR corner
-        outHandles[4] = WorldToScreen(entity.x, entity.y + hy, cam, viewport);      // top edge mid
-        outHandles[5] = WorldToScreen(entity.x, entity.y - hy, cam, viewport);      // bottom edge mid
-        outHandles[6] = WorldToScreen(entity.x - hx, entity.y, cam, viewport);      // left edge mid
-        outHandles[7] = WorldToScreen(entity.x + hx, entity.y, cam, viewport);      // right edge mid
+        float hx = transform.sx * 0.5f;
+        float hy = transform.sy * 0.5f;
+        outHandles[0] = WorldToScreen(transform.x - hx, transform.y + hy, cam, viewport); // TL corner
+        outHandles[1] = WorldToScreen(transform.x + hx, transform.y + hy, cam, viewport); // TR corner
+        outHandles[2] = WorldToScreen(transform.x - hx, transform.y - hy, cam, viewport); // BL corner
+        outHandles[3] = WorldToScreen(transform.x + hx, transform.y - hy, cam, viewport); // BR corner
+        outHandles[4] = WorldToScreen(transform.x, transform.y + hy, cam, viewport);      // top edge mid
+        outHandles[5] = WorldToScreen(transform.x, transform.y - hy, cam, viewport);      // bottom edge mid
+        outHandles[6] = WorldToScreen(transform.x - hx, transform.y, cam, viewport);      // left edge mid
+        outHandles[7] = WorldToScreen(transform.x + hx, transform.y, cam, viewport);      // right edge mid
     }
 }
 
-void Gizmo::Draw(ImDrawList* drawList, const Entity& entity, const Camera& cam, const ViewportRect& viewport) {
+void Gizmo::Draw(ImDrawList* drawList, const Transform& transform, const Camera& cam, const ViewportRect& viewport) {
     if (mode != GizmoMode::Move && mode != GizmoMode::Rotate && mode != GizmoMode::Scale) return;
 
     if (mode == GizmoMode::Rotate) {
         ImVec2 center;
-        float ringRadius = ComputeRotateRingRadius(entity, cam, viewport, center);
+        float ringRadius = ComputeRotateRingRadius(transform, cam, viewport, center);
 
         drawList->PushClipRect(ImVec2(viewport.x, viewport.y), ImVec2(viewport.x + viewport.width, viewport.y + viewport.height), true);
         drawList->AddCircle(center, ringRadius, IM_COL32(255, 220, 0, 255), 0, 2.0f);
@@ -107,7 +107,7 @@ void Gizmo::Draw(ImDrawList* drawList, const Entity& entity, const Camera& cam, 
 
     if (mode == GizmoMode::Scale) {
         ImVec2 handles[8];
-        ComputeScaleHandlePositions(entity, cam, viewport, handles);
+        ComputeScaleHandlePositions(transform, cam, viewport, handles);
 
         drawList->PushClipRect(ImVec2(viewport.x, viewport.y), ImVec2(viewport.x + viewport.width, viewport.y + viewport.height), true);
         for (int i = 0; i < 8; i++) {
@@ -120,7 +120,7 @@ void Gizmo::Draw(ImDrawList* drawList, const Entity& entity, const Camera& cam, 
     }
 
     ImVec2 center, xTip, yTip;
-    ComputeHandlePositions(entity, cam, viewport, center, xTip, yTip);
+    ComputeHandlePositions(transform, cam, viewport, center, xTip, yTip);
 
     drawList->PushClipRect(ImVec2(viewport.x, viewport.y), ImVec2(viewport.x + viewport.width, viewport.y + viewport.height), true);
 
@@ -133,7 +133,7 @@ void Gizmo::Draw(ImDrawList* drawList, const Entity& entity, const Camera& cam, 
     drawList->PopClipRect();
 }
 
-bool Gizmo::Update(Entity& entity, const Camera& cam, const ViewportRect& viewport,
+bool Gizmo::Update(Transform& transform, const Camera& cam, const ViewportRect& viewport,
                    bool mouseDown, bool mouseClicked, bool mouseReleased,
                    float mouseScreenX, float mouseScreenY) {
     if (mode != GizmoMode::Move && mode != GizmoMode::Rotate && mode != GizmoMode::Scale) {
@@ -144,7 +144,7 @@ bool Gizmo::Update(Entity& entity, const Camera& cam, const ViewportRect& viewpo
 
     if (mode == GizmoMode::Scale) {
         ImVec2 handles[8];
-        ComputeScaleHandlePositions(entity, cam, viewport, handles);
+        ComputeScaleHandlePositions(transform, cam, viewport, handles);
 
         // Hit-testing must stay inside the scene viewport, mirroring the clip rect used in Draw().
         bool insideViewport = (mouseScreenX >= viewport.x && mouseScreenX <= viewport.x + viewport.width &&
@@ -165,11 +165,11 @@ bool Gizmo::Update(Entity& entity, const Camera& cam, const ViewportRect& viewpo
                 activeHandle = handle;
                 // Center doesn't move during a scale drag — cache it, same pattern as Move's
                 // dragStartEntityX/Y, so later computations use a stable reference even though
-                // entity.x/y aren't actually mutated by this mode.
-                dragStartEntityX = entity.x;
-                dragStartEntityY = entity.y;
-                dragStartSx = entity.sx;
-                dragStartSy = entity.sy;
+                // transform.x/y aren't actually mutated by this mode.
+                dragStartEntityX = transform.x;
+                dragStartEntityY = transform.y;
+                dragStartSx = transform.sx;
+                dragStartSy = transform.sy;
                 // Cache the grab-time mouse world position (reusing Move's dragStart* fields,
                 // unused by Scale otherwise) as the baseline distance-from-center to diff
                 // against each frame, so the drag is relative rather than absolute. This is
@@ -194,12 +194,12 @@ bool Gizmo::Update(Entity& entity, const Camera& cam, const ViewportRect& viewpo
             bool isLeftOrRightMid = (activeHandle == 16 || activeHandle == 17);
 
             if (isCorner) {
-                entity.sx = std::clamp(2.0f * newHalfX, kScaleMin, kScaleMax);
-                entity.sy = std::clamp(2.0f * newHalfY, kScaleMin, kScaleMax);
+                transform.sx = std::clamp(2.0f * newHalfX, kScaleMin, kScaleMax);
+                transform.sy = std::clamp(2.0f * newHalfY, kScaleMin, kScaleMax);
             } else if (isTopOrBottomMid) {
-                entity.sy = std::clamp(2.0f * newHalfY, kScaleMin, kScaleMax);
+                transform.sy = std::clamp(2.0f * newHalfY, kScaleMin, kScaleMax);
             } else if (isLeftOrRightMid) {
-                entity.sx = std::clamp(2.0f * newHalfX, kScaleMin, kScaleMax);
+                transform.sx = std::clamp(2.0f * newHalfX, kScaleMin, kScaleMax);
             }
         }
 
@@ -212,7 +212,7 @@ bool Gizmo::Update(Entity& entity, const Camera& cam, const ViewportRect& viewpo
 
     if (mode == GizmoMode::Rotate) {
         ImVec2 center;
-        float ringRadius = ComputeRotateRingRadius(entity, cam, viewport, center);
+        float ringRadius = ComputeRotateRingRadius(transform, cam, viewport, center);
 
         // Hit-testing must stay inside the scene viewport, mirroring the clip rect used in Draw().
         bool insideViewport = (mouseScreenX >= viewport.x && mouseScreenX <= viewport.x + viewport.width &&
@@ -229,16 +229,16 @@ bool Gizmo::Update(Entity& entity, const Camera& cam, const ViewportRect& viewpo
                 activeHandle = 3; // distinct marker; rotate doesn't use Move's 0/1/2 handle ids
                 float dragStartWorldX, dragStartWorldY;
                 ScreenToWorld(mouseScreenX, mouseScreenY, cam, viewport, dragStartWorldX, dragStartWorldY);
-                dragStartAngle = std::atan2(dragStartWorldY - entity.y, dragStartWorldX - entity.x);
-                dragStartRotation = entity.rotation;
+                dragStartAngle = std::atan2(dragStartWorldY - transform.y, dragStartWorldX - transform.x);
+                dragStartRotation = transform.rotation;
             }
         }
 
         if (dragging && mouseDown) {
             float curWorldX, curWorldY;
             ScreenToWorld(mouseScreenX, mouseScreenY, cam, viewport, curWorldX, curWorldY);
-            float currentAngle = std::atan2(curWorldY - entity.y, curWorldX - entity.x);
-            entity.rotation = dragStartRotation + (currentAngle - dragStartAngle);
+            float currentAngle = std::atan2(curWorldY - transform.y, curWorldX - transform.x);
+            transform.rotation = dragStartRotation + (currentAngle - dragStartAngle);
         }
 
         if (!mouseDown || mouseReleased) {
@@ -249,7 +249,7 @@ bool Gizmo::Update(Entity& entity, const Camera& cam, const ViewportRect& viewpo
     }
 
     ImVec2 center, xTip, yTip;
-    ComputeHandlePositions(entity, cam, viewport, center, xTip, yTip);
+    ComputeHandlePositions(transform, cam, viewport, center, xTip, yTip);
 
     // Hit-testing must stay inside the scene viewport, mirroring the clip rect used in Draw():
     // a handle that's clipped out of view (e.g. panned behind the Hierarchy/Inspector panels)
@@ -273,8 +273,8 @@ bool Gizmo::Update(Entity& entity, const Camera& cam, const ViewportRect& viewpo
             dragging = true;
             activeHandle = handle;
             ScreenToWorld(mouseScreenX, mouseScreenY, cam, viewport, dragStartMouseX, dragStartMouseY);
-            dragStartEntityX = entity.x;
-            dragStartEntityY = entity.y;
+            dragStartEntityX = transform.x;
+            dragStartEntityY = transform.y;
         }
     }
 
@@ -285,12 +285,12 @@ bool Gizmo::Update(Entity& entity, const Camera& cam, const ViewportRect& viewpo
         float deltaY = curWorldY - dragStartMouseY;
 
         if (activeHandle == 0) {
-            entity.x = dragStartEntityX + deltaX;
+            transform.x = dragStartEntityX + deltaX;
         } else if (activeHandle == 1) {
-            entity.y = dragStartEntityY + deltaY;
+            transform.y = dragStartEntityY + deltaY;
         } else if (activeHandle == 2) {
-            entity.x = dragStartEntityX + deltaX;
-            entity.y = dragStartEntityY + deltaY;
+            transform.x = dragStartEntityX + deltaX;
+            transform.y = dragStartEntityY + deltaY;
         }
     }
 

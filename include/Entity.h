@@ -4,19 +4,6 @@
 #include <string>
 #include <vector>
 
-struct Entity {
-    std::string name;
-    float x, y;
-    float rotation;
-    float sx, sy;
-    float color[3];
-    std::string textureName;
-    bool active;
-    bool hasGravity;
-    bool isStatic;
-    float vy;
-};
-
 struct Particle {
     float x, y, vx, vy, life;
     float color[3];

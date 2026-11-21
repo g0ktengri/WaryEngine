@@ -341,7 +341,7 @@ void Renderer::CreateView(float *m, Camera c, float aspect) {
     m[3] = 0;               m[7] = 0;      m[11] = 0; m[15] = 1;
 }
 
-void Renderer::Render(std::vector<Entity>& entities, std::vector<Particle>& particles, const Camera& cam, const ViewportRect& viewport, int windowHeight) {
+void Renderer::Render(Registry& registry, std::vector<Particle>& particles, const Camera& cam, const ViewportRect& viewport, int windowHeight) {
     glClearColor(0.12f, 0.12f, 0.15f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
@@ -372,12 +372,14 @@ void Renderer::Render(std::vector<Entity>& entities, std::vector<Particle>& part
     for (auto &kv : entityBatches)
         kv.second.clear(); // keep capacity across frames
     unsigned int lastEntityTid = defaultTid;
-    for (auto &e : entities) {
-        auto it = textures.find(e.textureName);
+    for (EntityID id : registry.Entities()) {
+        const Transform& t = registry.transforms.Get(id);
+        const Sprite& s = registry.sprites.Get(id);
+        auto it = textures.find(s.textureName);
         unsigned int tid = (it != textures.end()) ? it->second : defaultTid;
         float tm[16];
-        CreateTransform(tm, e.x, e.y, e.rotation, e.sx, e.sy);
-        AppendQuad(entityBatches[tid], tm, e.color, 1.0f);
+        CreateTransform(tm, t.x, t.y, t.rotation, t.sx, t.sy);
+        AppendQuad(entityBatches[tid], tm, s.color, 1.0f);
         lastEntityTid = tid;
     }
 

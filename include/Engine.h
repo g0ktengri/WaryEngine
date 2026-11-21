@@ -4,6 +4,7 @@
 #include <SDL.h>
 #include <vector>
 #include "Entity.h"
+#include "Registry.h"
 #include "Renderer.h"
 #include "EditorUI.h"
 
@@ -21,18 +22,18 @@ private:
     EditorUI editorUI;
     bool running;
     
-    std::vector<Entity> entities;
+    Registry registry;
     std::vector<Particle> particles;
     Camera cam;
-    int selectedEntity;
+    EntityID selectedEntity = EditorUI::kNoSelection; // set to the Player in Init()
 
     void Update();
     void SaveScene();
     void LoadScene();
     void Undo(); // Ctrl+Z
-    bool CheckCollision(const Entity &a, const Entity &b);
+    bool CheckCollision(const Transform &a, const Transform &b);
 
-    std::vector<std::vector<Entity>> undoStack;
+    std::vector<std::vector<EntitySnapshot>> undoStack;
 };
 
 #endif

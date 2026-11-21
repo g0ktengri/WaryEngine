@@ -62,10 +62,13 @@ static ImGuiID BuildDefaultDockLayout(ImGuiID dockspaceId, int winW, int winH) {
 
 // Shared by the Hierarchy panel's "+ New Entity" button and the File menu's "+ New Entity" item,
 // so the two can't drift apart over time.
-static void SpawnNewEntity(std::vector<Entity>& entities, const Camera& cam,
-                            std::vector<std::vector<Entity>>& undoStack) {
-    undoStack.push_back(entities); // Save before adding
-    entities.push_back({"Prop", cam.x, cam.y, 0, 0.3f, 0.3f, {1,1,1}, "default", true, false, 0});
+static void SpawnNewEntity(Registry& registry, const Camera& cam,
+                            std::vector<std::vector<EntitySnapshot>>& undoStack) {
+    undoStack.push_back(registry.Snapshot()); // Save before adding
+    EntityID id = registry.Create("Prop");
+    registry.transforms.Add(id, {cam.x, cam.y, 0, 0.3f, 0.3f});
+    registry.sprites.Add(id, {{1,1,1}, "default"});
+    registry.physics.Add(id, {false, false, 0});
 }
 
 // Draws the theme's one deliberately-allowed gradient: a faint light sheen across the top edge of
@@ -121,14 +124,14 @@ void EditorUI::Init(SDL_Window* window, SDL_GLContext ctx) {
     ImGui_ImplOpenGL3_Init("#version 330");
 }
 
-bool EditorUI::CheckPointInside(Entity &e, float px, float py) {
-    float halfX = e.sx / 2.0f;
-    float halfY = e.sy / 2.0f;
-    return (px > e.x - halfX && px < e.x + halfX && py > e.y - halfY && py < e.y + halfY);
+bool EditorUI::CheckPointInside(const Transform &t, float px, float py) {
+    float halfX = t.sx / 2.0f;
+    float halfY = t.sy / 2.0f;
+    return (px > t.x - halfX && px < t.x + halfX && py > t.y - halfY && py < t.y + halfY);
 }
 
-ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, const Camera& cam,
-                             int& selected, std::vector<std::vector<Entity>>& undoStack,
+ViewportRect EditorUI::Draw(SDL_Window* window, Registry& registry, const Camera& cam,
+                             EntityID& selected, std::vector<std::vector<EntitySnapshot>>& undoStack,
                              bool& saveRequested, const std::vector<std::string>& textureList) {
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplSDL2_NewFrame();
@@ -173,7 +176,7 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("+ New Entity")) {
-                SpawnNewEntity(entities, cam, undoStack);
+                SpawnNewEntity(registry, cam, undoStack);
             }
             if (ImGui::MenuItem("Save")) {
                 saveRequested = true;
@@ -182,13 +185,15 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
         }
         if (ImGui::BeginMenu("Edit")) {
             if (ImGui::MenuItem("Undo", nullptr, false, !undoStack.empty())) {
-                // Replicates Engine::Undo()'s exact 3-line logic inline: Draw() already has
-                // entities/undoStack by reference, and Engine::Undo() isn't reachable from here
+                // Replicates Engine::Undo()'s exact logic inline: Draw() already has
+                // registry/undoStack by reference, and Engine::Undo() isn't reachable from here
                 // (separate class) -- exposing it across that boundary would be more invasive than
-                // this small duplication is worth.
+                // this small duplication is worth. Restore reassigns every EntityID, so selection
+                // resets to "nothing" (same rule as Engine::Undo()).
                 if (!undoStack.empty()) {
-                    entities = undoStack.back();
+                    registry.Restore(undoStack.back());
                     undoStack.pop_back();
+                    selected = EditorUI::kNoSelection;
                 }
             }
             ImGui::EndMenu();
@@ -213,9 +218,10 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
                     float r = std::rand() / (float)RAND_MAX;
                     float g = std::rand() / (float)RAND_MAX;
                     float b = std::rand() / (float)RAND_MAX;
-                    entities.push_back(Entity{.name = "Test", .x = px, .y = py, .rotation = 0, .sx = 0.1f, .sy = 0.1f,
-                                               .color = {r, g, b}, .textureName = "default", .active = true,
-                                               .hasGravity = false, .isStatic = false, .vy = 0});
+                    EntityID id = registry.Create("Test");
+                    registry.transforms.Add(id, {px, py, 0, 0.1f, 0.1f});
+                    registry.sprites.Add(id, {{r, g, b}, "default"});
+                    registry.physics.Add(id, {false, false, 0});
                 }
             }
             ImGui::EndMenu();
@@ -317,9 +323,9 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
 
     // --- Gizmo (claims its own clicks before entity-picking runs) ---
     bool gizmoActive = false;
-    if (selected >= 0 && selected < (int)entities.size()) {
-        gizmo.Draw(ImGui::GetForegroundDrawList(), entities[selected], cam, viewport);
-        gizmoActive = gizmo.Update(entities[selected], cam, viewport,
+    if (selected != EditorUI::kNoSelection) {
+        gizmo.Draw(ImGui::GetForegroundDrawList(), registry.transforms.Get(selected), cam, viewport);
+        gizmoActive = gizmo.Update(registry.transforms.Get(selected), cam, viewport,
                                     ImGui::IsMouseDown(ImGuiMouseButton_Left),
                                     ImGui::IsMouseClicked(ImGuiMouseButton_Left) && sceneHovered,
                                     ImGui::IsMouseReleased(ImGuiMouseButton_Left),
@@ -330,7 +336,7 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
     bool editing = ImGui::IsAnyItemActive() || gizmoActive;
     if (editing) {
         if (!wasActive) {
-            preEditState = entities;
+            preEditState = registry.Snapshot();
             wasActive = true;
         }
     } else {
@@ -352,9 +358,11 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
              float wx = ndcX * aspect / cam.zoom + cam.x;
              float wy = ndcY / cam.zoom + cam.y;
 
-             for (int k = (int)entities.size() - 1; k >= 0; k--) {
-                if (CheckPointInside(entities[k], wx, wy)) {
-                    selected = k;
+             const auto& ids = registry.Entities();
+             for (int k = (int)ids.size() - 1; k >= 0; k--) {
+                EntityID id = ids[k];
+                if (CheckPointInside(registry.transforms.Get(id), wx, wy)) {
+                    selected = id;
                     break;
                 }
              }
@@ -367,35 +375,38 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
     if (ImGui::Button("Save", ImVec2(-1, 0))) { saveRequested = true; }
     ImGui::TextDisabled("Entities");
     ImGui::Separator();
-    for (int i = 0; i < (int)entities.size(); i++) {
-        if (ImGui::Selectable((entities[i].name + "##" + std::to_string(i)).c_str(), i == selected))
-            selected = i;
+    for (EntityID id : registry.Entities()) {
+        if (ImGui::Selectable((registry.Name(id) + "##" + std::to_string(id)).c_str(), id == selected))
+            selected = id;
     }
     if (ImGui::Button("+ New Entity", ImVec2(-1, 30))) {
-        SpawnNewEntity(entities, cam, undoStack);
+        SpawnNewEntity(registry, cam, undoStack);
     }
     ImGui::End();
 
     // Inspector
     ImGui::Begin("Inspector", nullptr, ImGuiWindowFlags_NoCollapse);
-    if (selected >= 0 && selected < (int)entities.size()) {
-        Entity &e = entities[selected];
+    if (selected != EditorUI::kNoSelection) {
+        Transform& t = registry.transforms.Get(selected);
+        Sprite& s = registry.sprites.Get(selected);
+        Physics& p = registry.physics.Get(selected);
+        std::string& name = registry.Name(selected);
         ImGui::Text("Properties");
         ImGui::Separator();
-        char nBuf[64]; strcpy(nBuf, e.name.c_str());
-        if (ImGui::InputText("Name", nBuf, 64)) e.name = nBuf;
+        char nBuf[64]; strcpy(nBuf, name.c_str());
+        if (ImGui::InputText("Name", nBuf, 64)) name = nBuf;
 
-        if (ImGui::BeginCombo("Texture", e.textureName.c_str())) {
+        if (ImGui::BeginCombo("Texture", s.textureName.c_str())) {
             for (auto &texName : textureList) {
-                bool is_selected = (e.textureName == texName);
-                if (ImGui::Selectable(texName.c_str(), is_selected)) e.textureName = texName;
+                bool is_selected = (s.textureName == texName);
+                if (ImGui::Selectable(texName.c_str(), is_selected)) s.textureName = texName;
                 if (is_selected) ImGui::SetItemDefaultFocus();
             }
             ImGui::EndCombo();
         }
-        ImGui::DragFloat("Pos X", &e.x, 0.01f);
-        ImGui::DragFloat("Pos Y", &e.y, 0.01f);
-        ImGui::SliderFloat("Rot", &e.rotation, -3.14f, 3.14f);
+        ImGui::DragFloat("Pos X", &t.x, 0.01f);
+        ImGui::DragFloat("Pos Y", &t.y, 0.01f);
+        ImGui::SliderFloat("Rot", &t.rotation, -3.14f, 3.14f);
 
         ImGui::Separator();
         ImGui::Text("Size");
@@ -403,27 +414,29 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
         ImGui::Checkbox("Uniform Scale", &uniformScale);
 
         if (uniformScale) {
-            float ratio = e.sx / e.sy;
-            if (ImGui::DragFloat("Width (Locked)", &e.sx, 0.01f, 0.01f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
+            float ratio = t.sx / t.sy;
+            if (ImGui::DragFloat("Width (Locked)", &t.sx, 0.01f, 0.01f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
                 if (ratio > 0.0001f) {
-                     e.sy = e.sx / ratio;
+                     t.sy = t.sx / ratio;
                 }
             }
             ImGui::TextDisabled("Height is locked to Width (Ratio: %.2f)", ratio);
         } else {
-            ImGui::DragFloat("Width (X)", &e.sx, 0.01f, 0.01f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
-            ImGui::DragFloat("Height (Y)", &e.sy, 0.01f, 0.01f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            ImGui::DragFloat("Width (X)", &t.sx, 0.01f, 0.01f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
+            ImGui::DragFloat("Height (Y)", &t.sy, 0.01f, 0.01f, 10.0f, "%.3f", ImGuiSliderFlags_AlwaysClamp);
         }
         ImGui::Separator();
 
-        ImGui::ColorEdit3("Color", e.color);
-        ImGui::Checkbox("Gravity", &e.hasGravity);
-        ImGui::Checkbox("Is Static", &e.isStatic);
+        ImGui::ColorEdit3("Color", s.color);
+        ImGui::Checkbox("Gravity", &p.hasGravity);
+        ImGui::Checkbox("Is Static", &p.isStatic);
         ImGui::Dummy(ImVec2(0, 20));
         if (ImGui::Button("DELETE ENTITY", ImVec2(-1, 30))) {
-            undoStack.push_back(entities); // Save state before delete
-            entities.erase(entities.begin() + selected);
-            selected = 0;
+            undoStack.push_back(registry.Snapshot()); // Save state before delete
+            registry.Destroy(selected);
+            // A structural change clears selection (spec 1a); t/s/p/name now dangle and
+            // must not be touched past this point.
+            selected = EditorUI::kNoSelection;
         }
     }
     ImGui::End();
@@ -434,7 +447,7 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
     // carries the "floating glass chip" treatment: meaningful rounding, a translucent background
     // that actually blends with the rendered scene behind it, and the top-edge sheen. Style pushed
     // around Begin/End only, so none of it leaks onto Hierarchy/Inspector/Scene.
-    if (selected >= 0 && selected < (int)entities.size()) {
+    if (selected != EditorUI::kNoSelection) {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, kToolbarWindowRounding);
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, kToolbarFrameRounding);
         ImGui::PushStyleColor(ImGuiCol_WindowBg, kToolbarGlassBg);
