@@ -17,6 +17,8 @@ public:
                        int& selected, std::vector<std::vector<Entity>>& undoStack,
                        bool& saveRequested, const std::vector<std::string>& textureList);
 
+    bool IsSceneHovered() const { return lastSceneHovered; }
+
 private:
     void SetupUIStyle();
     bool CheckPointInside(Entity& e, float px, float py);
@@ -26,6 +28,7 @@ private:
     Gizmo gizmo;
     Uint32 lastFrameTicks = 0;
     float fpsSmoothed = 0.0f;
+    bool lastSceneHovered = false;
 };
 
 #endif

@@ -40,7 +40,7 @@ void Engine::Run() {
             Input::Update(ev);
 
             // Zoom
-            if (ev.type == SDL_MOUSEWHEEL) {
+            if (ev.type == SDL_MOUSEWHEEL && ev.wheel.y != 0 && editorUI.IsSceneHovered()) {
                 cam.zoom *= (ev.wheel.y > 0 ? 1.1f : 0.9f);
             }
         }

@@ -213,7 +213,9 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
                     float r = std::rand() / (float)RAND_MAX;
                     float g = std::rand() / (float)RAND_MAX;
                     float b = std::rand() / (float)RAND_MAX;
-                    entities.push_back({"Test", px, py, 0, 0.1f, 0.1f, {r, g, b}, "default", true, false, 0});
+                    entities.push_back(Entity{.name = "Test", .x = px, .y = py, .rotation = 0, .sx = 0.1f, .sy = 0.1f,
+                                               .color = {r, g, b}, .textureName = "default", .active = true,
+                                               .hasGravity = false, .isStatic = false, .vy = 0});
                 }
             }
             ImGui::EndMenu();
@@ -304,6 +306,7 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
     // GizmoToolbar overlay drawn on top of it later this same frame) is the precise replacement, used
     // below for both the gizmo click-start gate and the entity-picking click gate.
     bool sceneHovered = ImGui::IsWindowHovered();
+    lastSceneHovered = sceneHovered;
     ImVec2 sceneOrigin = ImGui::GetCursorScreenPos();
     ImVec2 sceneSize = ImGui::GetContentRegionAvail();
     viewport = ViewportRect{sceneOrigin.x, sceneOrigin.y, sceneSize.x, sceneSize.y};
