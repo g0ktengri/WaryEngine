@@ -111,6 +111,7 @@ void Renderer::Init() {
 
     InitShader();
     InitBuffers();
+    InitGridBuffers();
     InitInfiniteGrid();
     RefreshTextures();
 }
@@ -142,6 +143,26 @@ void Renderer::InitBuffers() {
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(i), i, GL_STATIC_DRAW);
     
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), 0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+}
+
+void Renderer::InitGridBuffers() {
+    float v[] = {-0.5f, -0.5f, 0, 0, 0, 0.5f,  -0.5f, 0, 1, 0,
+                 0.5f,  0.5f,  0, 1, 1, -0.5f, 0.5f,  0, 0, 1};
+    unsigned int i[] = {0, 1, 2, 2, 3, 0};
+
+    glGenVertexArrays(1, &gridVAO);
+    glGenBuffers(1, &gridVBO);
+    glGenBuffers(1, &gridEBO);
+    glBindVertexArray(gridVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, gridVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(v), v, GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gridEBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(i), i, GL_STATIC_DRAW);
+
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), 0);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)(3 * sizeof(float)));
@@ -246,7 +267,7 @@ void Renderer::Render(std::vector<Entity>& entities, std::vector<Particle>& part
     CreateTransform(gridTransform, cam.x, cam.y, 0, 1000.0f / cam.zoom, 1000.0f / cam.zoom);
     glUniformMatrix4fv(glGetUniformLocation(gridProgram, "transform"), 1, 0, gridTransform);
 
-    glBindVertexArray(VAO); // Re-use standard quad
+    glBindVertexArray(gridVAO);
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
     // Draw Entities

@@ -28,7 +28,7 @@ private:
     unsigned int VAO, VBO, EBO;
     
     // Grid
-    unsigned int gridVAO, gridVBO;
+    unsigned int gridVAO, gridVBO, gridEBO;
     unsigned int axisVAO, axisVBO;
     std::vector<float> gridVertices;
 
@@ -38,6 +38,7 @@ private:
 
     void InitShader();
     void InitBuffers();
+    void InitGridBuffers();
     void InitInfiniteGrid();
     unsigned int LoadTexture(const char* path);
     
