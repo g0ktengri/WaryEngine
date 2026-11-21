@@ -5,6 +5,7 @@
 #include "imgui_impl_opengl3.h"
 #include <filesystem>
 #include <cstring>
+#include <cstdlib>
 
 // Single named accent color for the whole editor theme: a deliberate, unambiguous red (not
 // orange, not a desaturated purple/magenta) used for every "this is active/on/selected"
@@ -199,6 +200,21 @@ ViewportRect EditorUI::Draw(SDL_Window* window, std::vector<Entity>& entities, c
                 // fresh/removed node going in, same precondition the first-run path above relies on.
                 ImGui::DockBuilderRemoveNode(dockspaceId);
                 centerId = BuildDefaultDockLayout(dockspaceId, winW, winH);
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Debug")) {
+            // Stress-test control: each click APPENDS 1000 entities (never clears), so repeated clicks
+            // stack. Position/color are uniform random via rand(), same RNG the particle spawn uses.
+            if (ImGui::MenuItem("Spawn 1000 Test Entities")) {
+                for (int i = 0; i < 1000; i++) {
+                    float px = -5.0f + 10.0f * (std::rand() / (float)RAND_MAX);
+                    float py = -5.0f + 10.0f * (std::rand() / (float)RAND_MAX);
+                    float r = std::rand() / (float)RAND_MAX;
+                    float g = std::rand() / (float)RAND_MAX;
+                    float b = std::rand() / (float)RAND_MAX;
+                    entities.push_back({"Test", px, py, 0, 0.1f, 0.1f, {r, g, b}, "default", true, false, 0});
+                }
             }
             ImGui::EndMenu();
         }
