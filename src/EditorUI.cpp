@@ -193,7 +193,7 @@ ViewportRect EditorUI::Draw(SDL_Window* window, Registry& registry, const Camera
                 if (!undoStack.empty()) {
                     registry.Restore(undoStack.back());
                     undoStack.pop_back();
-                    selected = EditorUI::kNoSelection;
+                    selected = kNullEntity;
                 }
             }
             ImGui::EndMenu();
@@ -323,7 +323,7 @@ ViewportRect EditorUI::Draw(SDL_Window* window, Registry& registry, const Camera
 
     // --- Gizmo (claims its own clicks before entity-picking runs) ---
     bool gizmoActive = false;
-    if (selected != EditorUI::kNoSelection) {
+    if (selected != kNullEntity) {
         gizmo.Draw(ImGui::GetForegroundDrawList(), registry.transforms.Get(selected), cam, viewport);
         gizmoActive = gizmo.Update(registry.transforms.Get(selected), cam, viewport,
                                     ImGui::IsMouseDown(ImGuiMouseButton_Left),
@@ -386,7 +386,7 @@ ViewportRect EditorUI::Draw(SDL_Window* window, Registry& registry, const Camera
 
     // Inspector
     ImGui::Begin("Inspector", nullptr, ImGuiWindowFlags_NoCollapse);
-    if (selected != EditorUI::kNoSelection) {
+    if (selected != kNullEntity) {
         Transform& t = registry.transforms.Get(selected);
         Sprite& s = registry.sprites.Get(selected);
         Physics& p = registry.physics.Get(selected);
@@ -436,7 +436,7 @@ ViewportRect EditorUI::Draw(SDL_Window* window, Registry& registry, const Camera
             registry.Destroy(selected);
             // A structural change clears selection (spec 1a); t/s/p/name now dangle and
             // must not be touched past this point.
-            selected = EditorUI::kNoSelection;
+            selected = kNullEntity;
         }
     }
     ImGui::End();
@@ -447,7 +447,7 @@ ViewportRect EditorUI::Draw(SDL_Window* window, Registry& registry, const Camera
     // carries the "floating glass chip" treatment: meaningful rounding, a translucent background
     // that actually blends with the rendered scene behind it, and the top-edge sheen. Style pushed
     // around Begin/End only, so none of it leaks onto Hierarchy/Inspector/Scene.
-    if (selected != EditorUI::kNoSelection) {
+    if (selected != kNullEntity) {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, kToolbarWindowRounding);
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, kToolbarFrameRounding);
         ImGui::PushStyleColor(ImGuiCol_WindowBg, kToolbarGlassBg);

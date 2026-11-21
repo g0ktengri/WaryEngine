@@ -5,6 +5,9 @@
 #include <utility>
 
 using EntityID = uint32_t;
+// "Nothing selected" / "no entity" sentinel for EntityID-based identity. Lives next to
+// EntityID's own definition rather than on a UI class, since it's a core domain concept.
+constexpr EntityID kNullEntity = UINT32_MAX;
 
 template <typename T>
 class SparseSet {
@@ -29,6 +32,7 @@ public:
     const T& Get(EntityID e) const { return dense[(size_t)sparse[e]]; }
     const std::vector<EntityID>& Ids() const { return denseIds; }
     std::vector<T>& Dense() { return dense; }
+    const std::vector<T>& Dense() const { return dense; }
 private:
     std::vector<int> sparse;
     std::vector<EntityID> denseIds;

@@ -341,7 +341,7 @@ void Renderer::CreateView(float *m, Camera c, float aspect) {
     m[3] = 0;               m[7] = 0;      m[11] = 0; m[15] = 1;
 }
 
-void Renderer::Render(Registry& registry, std::vector<Particle>& particles, const Camera& cam, const ViewportRect& viewport, int windowHeight) {
+void Renderer::Render(const Registry& registry, std::vector<Particle>& particles, const Camera& cam, const ViewportRect& viewport, int windowHeight) {
     glClearColor(0.12f, 0.12f, 0.15f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 

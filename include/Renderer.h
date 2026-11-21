@@ -17,7 +17,7 @@ public:
     ~Renderer();
 
     void Init();
-    void Render(Registry& registry, std::vector<Particle>& particles, const Camera& cam, const ViewportRect& viewport, int windowHeight);
+    void Render(const Registry& registry, std::vector<Particle>& particles, const Camera& cam, const ViewportRect& viewport, int windowHeight);
     void RefreshTextures();
 
     // Helpers

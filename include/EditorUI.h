@@ -9,9 +9,6 @@
 
 class EditorUI {
 public:
-    // "Nothing selected" sentinel for EntityID-based selection (shared with Engine).
-    static constexpr EntityID kNoSelection = UINT32_MAX;
-
     EditorUI();
     ~EditorUI();
 

@@ -82,7 +82,7 @@ void Engine::Update() {
     }
 
     // Entity Control
-    if (selectedEntity != EditorUI::kNoSelection) {
+    if (selectedEntity != kNullEntity) {
         Transform& t = registry.transforms.Get(selectedEntity);
         float s = 0.02f / cam.zoom;
         float pdx = 0, pdy = 0;
@@ -126,27 +126,35 @@ void Engine::Update() {
     }
 
     // Physics
-    for (EntityID id : registry.Entities()) {
-        Physics& p = registry.physics.Get(id);
-        if (p.hasGravity && !p.isStatic) {
-            Transform& t = registry.transforms.Get(id);
-            p.vy -= 0.001f;
-            t.y += p.vy;
+    // Drives the loop from the Physics SparseSet's own packed storage (Ids()/Dense() are
+    // parallel: Ids()[i] corresponds to Dense()[i]) instead of iterating registry.Entities()
+    // and looking each one up via physics.Get(id) — every entity visited here is guaranteed
+    // to actually have a Physics component, so no Has() guard is needed.
+    auto& physIds = registry.physics.Ids();
+    auto& physDense = registry.physics.Dense();
+    for (size_t i = 0; i < physIds.size(); i++) {
+        EntityID id = physIds[i];
+        Physics& p = physDense[i];
+        if (!p.hasGravity || p.isStatic) continue;
 
-            // Ground Collision
-            for (EntityID otherId : registry.Entities()) {
-                if (otherId == id || !registry.Active(otherId) || !registry.physics.Get(otherId).isStatic) continue;
-                if (CheckCollision(t, registry.transforms.Get(otherId))) {
-                    // Simple response: move back and stop
-                    t.y -= p.vy;
-                    p.vy = 0;
-                }
-            }
+        Transform& t = registry.transforms.Get(id);
+        p.vy -= 0.001f;
+        t.y += p.vy;
 
-            if (t.y < -0.8f) { // Floor default
-                t.y = -0.8f;
-                p.vy *= -0.5f;
+        // Ground Collision - checks every entity as a potential collision partner, not just
+        // physics-enabled ones, so this stays registry.Entities()-based.
+        for (EntityID otherId : registry.Entities()) {
+            if (otherId == id || !registry.Active(otherId) || !registry.physics.Get(otherId).isStatic) continue;
+            if (CheckCollision(t, registry.transforms.Get(otherId))) {
+                // Simple response: move back and stop
+                t.y -= p.vy;
+                p.vy = 0;
             }
+        }
+
+        if (t.y < -0.8f) { // Floor default
+            t.y = -0.8f;
+            p.vy *= -0.5f;
         }
     }
 
@@ -191,7 +199,7 @@ void Engine::LoadScene() {
         registry.physics.Add(id, {(bool)g, (bool)st, 0});
     }
     // Every EntityID was just reassigned: a structural change clears selection (spec 1a).
-    selectedEntity = EditorUI::kNoSelection;
+    selectedEntity = kNullEntity;
 }
 
 bool Engine::CheckCollision(const Transform &a, const Transform &b) {
@@ -209,6 +217,6 @@ void Engine::Undo() {
     if (!undoStack.empty()) {
         registry.Restore(undoStack.back());
         undoStack.pop_back();
-        selectedEntity = EditorUI::kNoSelection;
+        selectedEntity = kNullEntity;
     }
 }

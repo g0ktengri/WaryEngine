@@ -22,6 +22,8 @@ public:
 
     std::string& Name(EntityID e) { return names[e]; }
     bool& Active(EntityID e) { return actives[e]; }
+    const std::string& Name(EntityID e) const { return names[e]; }
+    bool Active(EntityID e) const { return actives[e]; }
 
     std::vector<EntitySnapshot> Snapshot() const;
     void Restore(const std::vector<EntitySnapshot>& snapshot);

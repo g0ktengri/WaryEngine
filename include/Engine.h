@@ -25,7 +25,7 @@ private:
     Registry registry;
     std::vector<Particle> particles;
     Camera cam;
-    EntityID selectedEntity = EditorUI::kNoSelection; // set to the Player in Init()
+    EntityID selectedEntity = kNullEntity; // set to the Player in Init()
 
     void Update();
     void SaveScene();
