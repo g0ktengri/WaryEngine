@@ -2,6 +2,7 @@
 #define SPARSE_SET_H
 #include <vector>
 #include <cstdint>
+#include <utility>
 
 using EntityID = uint32_t;
 
