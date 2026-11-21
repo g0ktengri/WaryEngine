@@ -40,8 +40,8 @@ void Engine::Run() {
             Input::Update(ev);
 
             // Zoom
-            if (ImGui::GetIO().MouseWheel != 0) {
-                cam.zoom *= (ImGui::GetIO().MouseWheel > 0 ? 1.1f : 0.9f);
+            if (ev.type == SDL_MOUSEWHEEL) {
+                cam.zoom *= (ev.wheel.y > 0 ? 1.1f : 0.9f);
             }
         }
 
