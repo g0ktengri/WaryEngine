@@ -26,6 +26,7 @@ public:
     }
     bool Has(EntityID e) const { return e < sparse.size() && sparse[e] != -1; }
     T& Get(EntityID e) { return dense[(size_t)sparse[e]]; }
+    const T& Get(EntityID e) const { return dense[(size_t)sparse[e]]; }
     const std::vector<EntityID>& Ids() const { return denseIds; }
     std::vector<T>& Dense() { return dense; }
 private:
